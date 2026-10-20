@@ -6,6 +6,9 @@ const studentRoutes = require("./routes/students");
 const studentDataRoutes = require("./routes/studentData");
 const facultyDataRoutes = require("./routes/facultyData");
 const employeeDataRoutes = require("./routes/employeeData");
+const operationsDataRoutes = require("./routes/operationsData");
+const academicDataRoutes = require("./routes/academicData");
+const roleAccess = require("./middleware/roleAccess");
 const app = express();
 const PORT = Number(process.env.PORT || 5000);
 
@@ -14,10 +17,12 @@ app.use(express.json());
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 
-app.use("/students", studentRoutes);
-app.use("/student-data", studentDataRoutes);
+app.use("/students", roleAccess(["ADMIN"]), studentRoutes);
+app.use("/student-data", roleAccess(["STUDENT"]), studentDataRoutes);
 app.use("/faculty-data", facultyDataRoutes);
-app.use("/employee-data", employeeDataRoutes);
+app.use("/employee-data", roleAccess(["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"]), employeeDataRoutes);
+app.use("/operations-data", roleAccess(["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"]), operationsDataRoutes);
+app.use("/academic-data", roleAccess(["ADMIN"]), academicDataRoutes);
 
 
 app.post("/login", async (req, res) => {

@@ -36,6 +36,15 @@ function UserForm() {
         setError(data.message || "Login failed.");
         return;
       }
+      const selectedRole = role.toUpperCase();
+      const employeeRoles = ["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"];
+      const roleMatches = selectedRole === "EMPLOYEE"
+        ? employeeRoles.includes(data.role)
+        : data.role === selectedRole;
+      if (!roleMatches) {
+        setError(`This account is registered as ${data.role.toLowerCase()}, not ${role}.`);
+        return;
+      }
       sessionStorage.setItem("erpUser", JSON.stringify(data));
       navigate(destinationByRole[data.role] || "/erp/student");
     } catch (requestError) {

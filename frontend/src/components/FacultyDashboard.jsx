@@ -18,8 +18,9 @@ const FacultyDashboard = () => {
     ["Dashboard", "/erp/faculty"],
     ["Assignments", "/erp/faculty/assignments"],
     ["Question bank", "/erp/faculty/question-bank"],
+    ["Attendance", "/erp/faculty/attendance"],
+    ["Timetable", "/erp/faculty/timetable"],
     ["Form generator", "/erp/faculty/form-generator"],
-    ["Manage students", "/erp/faculty/manage-students"],
   ];
 
   return (

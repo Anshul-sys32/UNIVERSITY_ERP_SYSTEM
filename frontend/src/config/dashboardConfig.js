@@ -6,6 +6,7 @@ export const dashboardSettings = {
       sidebarItems: [
         { path: "/erp/student", label: "Dashboard" },
         { path: "/erp/student/assignments", label: "Assignments" },
+        { path: "/erp/student/academics", label: "Academics" },
         { path: "/erp/student/fees", label: "Fee Details" },
         { path: "/erp/student/library", label: "Library Details" },
         { path: "/erp/student/events", label: "Events / Placement" },

@@ -33,12 +33,16 @@ const StudentDashboard = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [dashboard, setDashboard] = useState(null);
+  const [announcements, setAnnouncements] = useState([]);
   const [state, setState] = useState({ loading: true, error: "" });
   const settings = dashboardSettings.student;
 
   useEffect(() => {
-    fetchStudentResource("dashboard")
-      .then(setDashboard)
+    Promise.all([fetchStudentResource("dashboard"), fetchStudentResource("announcements")])
+      .then(([dashboardData, announcementsData]) => {
+        setDashboard(dashboardData);
+        setAnnouncements(announcementsData);
+      })
       .catch((error) => setState({ loading: false, error: error.message }))
       .finally(() => setState((current) => ({ ...current, loading: false })));
   }, []);
@@ -105,6 +109,9 @@ const StudentDashboard = () => {
                   {results.length ? <div className="space-y-3">{results.map((result) => <div className="flex items-center justify-between gap-4 border-b border-white/15 pb-3 text-sm last:border-0 last:pb-0" key={`${result.SUBJECT}-${result.SCORE}`}><span>{result.SUBJECT}</span><span className="font-semibold">{result.SCORE}/{result.MAX_SCORE}</span></div>)}</div> : <p className="text-sm text-white/60">No results published.</p>}
                 </Card>
               </div>
+              <Card title="Campus announcements">
+                {announcements.length ? <div className="space-y-3">{announcements.slice(0, 5).map((item) => <article className="border-b border-white/15 pb-3 last:border-0 last:pb-0" key={item.ANNOUNCEMENT_ID}><div className="flex items-start justify-between gap-3"><h3 className="font-medium">{item.TITLE}</h3><time className="whitespace-nowrap text-xs text-white/50">{new Date(item.CREATED_AT).toLocaleDateString("en-IN")}</time></div><p className="mt-1 text-sm leading-6 text-white/70">{item.MESSAGE}</p></article>)}</div> : <p className="text-sm text-white/60">No new announcements.</p>}
+              </Card>
             </StudentDataState>
           ) : <Outlet />}
         </main>

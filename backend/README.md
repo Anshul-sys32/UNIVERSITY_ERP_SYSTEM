@@ -18,30 +18,109 @@ dashboard, assignments, question bank, and forms. Employee endpoints are
 available under `/employee-data/:userId` for operational summaries and
 dashboard configuration.
 
-Create a faculty profile after registering a FACULTY user with
-`POST /faculty-data/profiles`.
+Create role accounts from Insomnia with `POST http://localhost:5000/register`.
+Use the JSON body below, changing the username, password, and role:
 
-data insertion in the json format
-
-eg - 
+```json
 {
-  "username": "20BCA1234",
+  "username": "accounts.admin",
   "password": "test1234",
-  "role": "Student"
+  "role": "ACCOUNTANT"
 }
+```
 
+For the first librarian, use:
 
-Use these values for role:
+```json
+{
+  "username": "library.admin",
+  "password": "test1234",
+  "role": "LIBRARIAN"
+}
+```
 
-"Student"
+The API accepts role names case-insensitively. Valid roles are `STUDENT`,
+`FACULTY`, `EMPLOYEE`, `ADMIN`, `LIBRARIAN`, and `ACCOUNTANT`.
 
-"Faculty"
+After registration, call `POST http://localhost:5000/login` to obtain the
+generated `user_id` and confirm the password:
 
-"Admin"
+```json
+{
+  "username": "accounts.admin",
+  "password": "test1234"
+}
+```
 
-"Librarian"
+Expected login response:
 
-"Accountant"
+```json
+{
+  "user_id": 12,
+  "username": "accounts.admin",
+  "role": "ACCOUNTANT"
+}
+```
+
+Use the returned `user_id` in the role-specific requests:
+
+```text
+GET http://localhost:5000/employee-data/12/summary
+GET http://localhost:5000/operations-data/12/accounting/summary
+```
+
+For a librarian with ID `13`:
+
+```text
+GET http://localhost:5000/employee-data/13/summary
+GET http://localhost:5000/operations-data/13/library/catalog
+GET http://localhost:5000/operations-data/13/library/issues
+```
+
+Accountants can use the accounting endpoints only. Librarians can use the
+library endpoints only. `ADMIN` can access both. All employee-portal requests
+must include the user ID in the URL.
+
+Placement department endpoints are available to `EMPLOYEE` and `ADMIN` users:
+
+```text
+GET   /employee-data/:userId/placements
+POST  /employee-data/:userId/placements
+GET   /employee-data/:userId/placements/applications
+PATCH /employee-data/:userId/placements/:driveId/status
+PATCH /employee-data/:userId/placements/applications/:applicationId/status
+```
+
+The frontend placement desk is available at
+`/erp/employee/placements`. Run the schema import again before using it so the
+`PLACEMENT_DRIVES` and `PLACEMENT_APPLICATIONS` tables are created.
+
+Academic operations are available in the student and faculty portals:
+
+```text
+GET  /student-data/:userId/courses
+GET  /student-data/:userId/timetable
+GET  /student-data/:userId/attendance
+GET  /faculty-data/:userId/courses
+GET  /faculty-data/:userId/timetable
+POST /faculty-data/:userId/course-registrations
+GET  /faculty-data/:userId/attendance/:courseId
+POST /faculty-data/:userId/attendance
+```
+
+Run the schema import again to create the academic tables before using these
+routes.
+
+Administrators can create and assign courses:
+
+```text
+GET   /academic-data/:adminUserId/courses
+POST  /academic-data/:adminUserId/courses
+PATCH /academic-data/:adminUserId/courses/:courseId/assign
+GET   /academic-data/:adminUserId/registrations
+POST  /academic-data/:adminUserId/registrations
+PATCH /academic-data/:adminUserId/registrations/:registrationId/status
+```
 
 
 

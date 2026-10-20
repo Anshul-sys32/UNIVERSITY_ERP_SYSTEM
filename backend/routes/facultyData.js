@@ -99,9 +99,155 @@ router.get("/:userId/dashboard", async (req, res) => {
       questions: questionRows[0] || { TOTAL: 0 },
       forms: formRows[0] || { TOTAL: 0 },
     });
+
   } catch (error) {
     console.error("Faculty dashboard error:", error);
     res.status(500).json({ message: "Unable to load the faculty dashboard." });
+  }
+});
+
+router.get("/:userId/courses", async (req, res) => {
+  try {
+    const faculty = await requireFaculty(req, res);
+    if (!faculty) return;
+    res.json(await pool.query(
+      `SELECT C.COURSE_ID, C.COURSE_CODE, C.TITLE, C.CREDITS, C.SEMESTER,
+        C.COURSE_TYPE, C.CAPACITY, COUNT(R.REGISTRATION_ID) AS REGISTERED_COUNT
+       FROM COURSES C
+       LEFT JOIN COURSE_REGISTRATIONS R ON R.COURSE_ID = C.COURSE_ID AND R.STATUS = 'REGISTERED'
+       WHERE C.FACULTY_ID = ? AND C.IS_ACTIVE = 1
+       GROUP BY C.COURSE_ID
+       ORDER BY C.SEMESTER, C.COURSE_CODE`,
+      [faculty.FACULTY_ID],
+    ));
+  } catch (error) {
+    console.error("Faculty courses error:", error);
+    res.status(500).json({ message: "Unable to load faculty courses." });
+  }
+});
+
+router.post("/:userId/course-registrations", async (req, res) => {
+  try {
+    const faculty = await requireFaculty(req, res);
+    if (!faculty) return;
+    const { courseId, rollNumber, academicYear } = req.body;
+    if (!Number.isInteger(Number(courseId)) || !rollNumber?.trim() || !academicYear?.trim()) {
+      return res.status(400).json({ message: "Course id, student roll number, and academic year are required." });
+    }
+
+    const courses = await pool.query(
+      "SELECT COURSE_ID, CAPACITY FROM COURSES WHERE COURSE_ID = ? AND FACULTY_ID = ? AND IS_ACTIVE = 1",
+      [courseId, faculty.FACULTY_ID],
+    );
+    if (!courses.length) {
+      return res.status(403).json({ message: "This course is not assigned to the signed-in faculty member." });
+    }
+
+    const students = await pool.query(
+      "SELECT STUDENT_ID, FIRST_NAME, LAST_NAME FROM STUDENTS WHERE ROLL_NUMBER = ? AND STATUS = 'ACTIVE'",
+      [rollNumber.trim()],
+    );
+    if (!students.length) return res.status(404).json({ message: "Active student with that roll number was not found." });
+
+    const existing = await pool.query(
+      "SELECT REGISTRATION_ID, STATUS FROM COURSE_REGISTRATIONS WHERE COURSE_ID = ? AND STUDENT_ID = ? AND ACADEMIC_YEAR = ?",
+      [courseId, students[0].STUDENT_ID, academicYear.trim()],
+    );
+    if (existing.length) {
+      return res.status(409).json({ message: "Student is already registered for this course and academic year.", registration: existing[0] });
+    }
+
+    const count = await pool.query(
+      "SELECT COUNT(*) AS TOTAL FROM COURSE_REGISTRATIONS WHERE COURSE_ID = ? AND ACADEMIC_YEAR = ? AND STATUS = 'REGISTERED'",
+      [courseId, academicYear.trim()],
+    );
+    if (Number(count[0]?.TOTAL || 0) >= Number(courses[0].CAPACITY)) {
+      return res.status(409).json({ message: "Course registration capacity has been reached." });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO COURSE_REGISTRATIONS (COURSE_ID, STUDENT_ID, ACADEMIC_YEAR)
+       VALUES (?, ?, ?)`,
+      [courseId, students[0].STUDENT_ID, academicYear.trim()],
+    );
+    res.status(201).json({
+      registrationId: Number(result.insertId),
+      student: students[0],
+      message: "Student registered for the course.",
+    });
+  } catch (error) {
+    console.error("Faculty course registration error:", error);
+    res.status(500).json({ message: "Unable to register student for the course." });
+  }
+});
+
+router.get("/:userId/timetable", async (req, res) => {
+  try {
+    const faculty = await requireFaculty(req, res);
+    if (!faculty) return;
+    res.json(await pool.query(
+      `SELECT T.SLOT_ID, T.DAY_OF_WEEK, T.START_TIME, T.END_TIME, T.ROOM,
+        C.COURSE_ID, C.COURSE_CODE, C.TITLE, C.SEMESTER
+       FROM TIMETABLE_SLOTS T
+       JOIN COURSES C ON C.COURSE_ID = T.COURSE_ID
+       WHERE C.FACULTY_ID = ? AND C.IS_ACTIVE = 1
+       ORDER BY FIELD(T.DAY_OF_WEEK, 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'), T.START_TIME`,
+      [faculty.FACULTY_ID],
+    ));
+  } catch (error) {
+    console.error("Faculty timetable error:", error);
+    res.status(500).json({ message: "Unable to load faculty timetable." });
+  }
+});
+
+router.get("/:userId/attendance/:courseId", async (req, res) => {
+  try {
+    const faculty = await requireFaculty(req, res);
+    if (!faculty) return;
+    const courses = await pool.query(
+      "SELECT COURSE_ID FROM COURSES WHERE COURSE_ID = ? AND FACULTY_ID = ?",
+      [req.params.courseId, faculty.FACULTY_ID],
+    );
+    if (!courses.length) return res.status(404).json({ message: "Course not found for this faculty member." });
+    res.json(await pool.query(
+      `SELECT S.STUDENT_ID, S.ROLL_NUMBER, S.FIRST_NAME, S.LAST_NAME,
+        A.LECTURE_DATE, A.STATUS
+       FROM COURSE_REGISTRATIONS R
+       JOIN STUDENTS S ON S.STUDENT_ID = R.STUDENT_ID
+       LEFT JOIN ATTENDANCE_LOGS A ON A.STUDENT_ID = S.STUDENT_ID AND A.COURSE_ID = R.COURSE_ID
+       WHERE R.COURSE_ID = ? AND R.STATUS = 'REGISTERED'
+       ORDER BY S.ROLL_NUMBER, A.LECTURE_DATE DESC`,
+      [req.params.courseId],
+    ));
+  } catch (error) {
+    console.error("Faculty attendance listing error:", error);
+    res.status(500).json({ message: "Unable to load course attendance." });
+  }
+});
+
+router.post("/:userId/attendance", async (req, res) => {
+  try {
+    const faculty = await requireFaculty(req, res);
+    if (!faculty) return;
+    const { courseId, studentId, lectureDate, status } = req.body;
+    if (!Number.isInteger(Number(courseId)) || !Number.isInteger(Number(studentId)) || !lectureDate || !["PRESENT", "ABSENT", "ON_DUTY"].includes(status)) {
+      return res.status(400).json({ message: "Course, student, date, and valid attendance status are required." });
+    }
+    const courses = await pool.query(
+      "SELECT COURSE_ID FROM COURSES WHERE COURSE_ID = ? AND FACULTY_ID = ?",
+      [courseId, faculty.FACULTY_ID],
+    );
+    if (!courses.length) return res.status(403).json({ message: "You can only record attendance for your courses." });
+    await pool.query(
+      `INSERT INTO ATTENDANCE_LOGS (COURSE_ID, STUDENT_ID, FACULTY_ID, LECTURE_DATE, STATUS)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE STATUS = VALUES(STATUS), FACULTY_ID = VALUES(FACULTY_ID)`,
+      [courseId, studentId, faculty.FACULTY_ID, lectureDate, status],
+    );
+    res.status(201).json({ message: "Attendance recorded." });
+  } catch (error) {
+    console.error("Record attendance error:", error);
+    res.status(500).json({ message: "Unable to record attendance." });
   }
 });
 

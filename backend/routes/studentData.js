@@ -73,13 +73,84 @@ router.get("/:userId/assignments", async (req, res) => {
   }
 });
 
+router.get("/:userId/courses", async (req, res) => {
+  try {
+    const studentId = await requireStudent(req, res);
+    if (!studentId) return;
+    const rows = await pool.query(
+      `SELECT C.COURSE_ID, C.COURSE_CODE, C.TITLE, C.CREDITS, C.SEMESTER,
+        C.COURSE_TYPE, C.DEPARTMENT, R.STATUS, R.ACADEMIC_YEAR
+       FROM COURSE_REGISTRATIONS R
+       JOIN COURSES C ON C.COURSE_ID = R.COURSE_ID
+       WHERE R.STUDENT_ID = ? AND R.STATUS = 'REGISTERED'
+       ORDER BY C.SEMESTER, C.COURSE_CODE`,
+      [studentId],
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("Student courses error:", error);
+    res.status(500).json({ message: "Unable to load registered courses." });
+  }
+});
+
+router.get("/:userId/timetable", async (req, res) => {
+  try {
+    const studentId = await requireStudent(req, res);
+    if (!studentId) return;
+    res.json(await pool.query(
+      `SELECT T.SLOT_ID, T.DAY_OF_WEEK, T.START_TIME, T.END_TIME, T.ROOM,
+        C.COURSE_CODE, C.TITLE
+       FROM TIMETABLE_SLOTS T
+       JOIN COURSES C ON C.COURSE_ID = T.COURSE_ID
+       JOIN COURSE_REGISTRATIONS R ON R.COURSE_ID = C.COURSE_ID
+       WHERE R.STUDENT_ID = ? AND R.STATUS = 'REGISTERED'
+       ORDER BY FIELD(T.DAY_OF_WEEK, 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'), T.START_TIME`,
+      [studentId],
+    ));
+  } catch (error) {
+    console.error("Student timetable error:", error);
+    res.status(500).json({ message: "Unable to load timetable." });
+  }
+});
+
+router.get("/:userId/attendance", async (req, res) => {
+  try {
+    const studentId = await requireStudent(req, res);
+    if (!studentId) return;
+    res.json(await pool.query(
+      `SELECT C.COURSE_ID, C.COURSE_CODE, C.TITLE,
+        COUNT(A.ATTENDANCE_ID) AS TOTAL_CLASSES,
+        COALESCE(SUM(A.STATUS IN ('PRESENT', 'ON_DUTY')), 0) AS ATTENDED_CLASSES,
+        COALESCE(ROUND((SUM(A.STATUS IN ('PRESENT', 'ON_DUTY')) / NULLIF(COUNT(A.ATTENDANCE_ID), 0)) * 100, 2), 0) AS ATTENDANCE_PERCENT,
+        MAX(A.LECTURE_DATE) AS LAST_CLASS_DATE
+       FROM COURSE_REGISTRATIONS R
+       JOIN COURSES C ON C.COURSE_ID = R.COURSE_ID
+       LEFT JOIN ATTENDANCE_LOGS A ON A.COURSE_ID = C.COURSE_ID AND A.STUDENT_ID = R.STUDENT_ID
+       WHERE R.STUDENT_ID = ? AND R.STATUS = 'REGISTERED'
+       GROUP BY C.COURSE_ID, C.COURSE_CODE, C.TITLE
+       ORDER BY C.COURSE_CODE`,
+      [studentId],
+    ));
+  } catch (error) {
+    console.error("Student attendance error:", error);
+    res.status(500).json({ message: "Unable to load course attendance." });
+  }
+});
+
 router.get("/:userId/fees", async (req, res) => {
   try {
     const studentId = await requireStudent(req, res);
     if (!studentId) return;
     const rows = await pool.query(
-      withStudent("SELECT * FROM FEE_TRANSACTIONS") + " ORDER BY DUE_DATE DESC, FEE_ID DESC",
-      [studentId],
+      `SELECT FEE_ID, DETAIL, DUE_DATE, AMOUNT, TRANSACTION_ID, STATUS, PAID_AT, NULL AS CREATED_AT
+       FROM FEE_TRANSACTIONS
+       WHERE STUDENT_ID = ?
+       UNION ALL
+       SELECT LEDGER_ID AS FEE_ID, DETAIL, DUE_DATE, AMOUNT, TRANSACTION_ID, STATUS, PAID_AT, CREATED_AT
+       FROM ACCOUNTING_LEDGER
+       WHERE STUDENT_ID = ?
+       ORDER BY DUE_DATE DESC, CREATED_AT DESC, FEE_ID DESC`,
+      [studentId, studentId],
     );
     res.json(rows);
   } catch (error) {
@@ -93,8 +164,16 @@ router.get("/:userId/library", async (req, res) => {
     const studentId = await requireStudent(req, res);
     if (!studentId) return;
     const rows = await pool.query(
-      withStudent("SELECT * FROM LIBRARY_BOOKS") + " ORDER BY ISSUE_DATE DESC",
-      [studentId],
+      `SELECT ISSUE_ID, TITLE, ISSUE_DATE, RETURN_DATE, STATUS, NULL AS DUE_DATE
+       FROM LIBRARY_BOOKS
+       WHERE STUDENT_ID = ?
+       UNION ALL
+       SELECT I.ISSUE_ID, C.TITLE, I.ISSUE_DATE, I.RETURN_DATE, I.STATUS, I.DUE_DATE
+       FROM LIBRARY_ISSUES I
+       JOIN LIBRARY_CATALOG C ON C.BOOK_ID = I.BOOK_ID
+       WHERE I.STUDENT_ID = ?
+       ORDER BY ISSUE_DATE DESC, ISSUE_ID DESC`,
+      [studentId, studentId],
     );
     res.json(rows);
   } catch (error) {
@@ -112,6 +191,23 @@ router.get("/:userId/events", async (req, res) => {
   } catch (error) {
     console.error("Campus events error:", error);
     res.status(500).json({ message: "Unable to load campus events." });
+  }
+});
+
+router.get("/:userId/announcements", async (req, res) => {
+  try {
+    const studentId = await requireStudent(req, res);
+    if (!studentId) return;
+    const rows = await pool.query(
+      `SELECT ANNOUNCEMENT_ID, TITLE, MESSAGE, CREATED_AT
+       FROM ANNOUNCEMENTS
+       WHERE IS_ACTIVE = 1 AND AUDIENCE IN ('ALL', 'STUDENT')
+       ORDER BY CREATED_AT DESC LIMIT 20`,
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("Student announcements error:", error);
+    res.status(500).json({ message: "Unable to load announcements." });
   }
 });
 

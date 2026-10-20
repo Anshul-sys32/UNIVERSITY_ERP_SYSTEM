@@ -29,3 +29,20 @@ export const employeeRequest = (path, options) => {
   if (!user?.user_id) throw new Error("Please sign in with an employee account first.");
   return request(`/employee-data/${user.user_id}${path}`, options);
 };
+
+export const operationsRequest = (path, options) => {
+  const user = getCurrentUser();
+  if (!user?.user_id) throw new Error("Please sign in with an employee account first.");
+  return request(`/operations-data/${user.user_id}${path}`, options);
+};
+
+export const adminRequest = (path, options = {}) => {
+  const user = getCurrentUser();
+  if (!user?.user_id || user.role !== "ADMIN") {
+    throw new Error("Please sign in with an administrator account first.");
+  }
+  return request(path, {
+    ...options,
+    headers: { ...(options.headers || {}), "x-user-id": String(user.user_id) },
+  });
+};

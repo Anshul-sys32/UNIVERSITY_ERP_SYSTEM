@@ -27,7 +27,7 @@ function Login() {
         </div>
         <div
           onClick={() => handleSelection("faculty")}
-          className="erp-panel flex h-80 w-72 cursor-pointer flex-col items-center justify-center text-white transition duration-300 hover:-translate-y-2 hover:bg-white/20"
+          className="erp-panel flex h-80 w-72 cursor-pointer flex-col items-center justify-center text-white transition-colors duration-150 hover:bg-white/20"
         >
           <img src={FacultyIcon} alt="Faculty" className="w-20 h-20 mb-4" />
           <h2 className="text-2xl font-semibold">Faculty</h2>
@@ -37,7 +37,7 @@ function Login() {
         {/* Student Card */}
         <div
           onClick={() => handleSelection("student")}
-          className="erp-panel flex h-80 w-72 cursor-pointer flex-col items-center justify-center text-white transition duration-300 hover:-translate-y-2 hover:bg-white/20"
+          className="erp-panel flex h-80 w-72 cursor-pointer flex-col items-center justify-center text-white transition-colors duration-150 hover:bg-white/20"
         >
           <img src={StudentIcon} alt="Student" className="w-20 h-20 mb-4" />
           <h2 className="text-2xl font-semibold">Student</h2>
@@ -47,7 +47,7 @@ function Login() {
         {/* Employee Card */}
         <div
           onClick={() => handleSelection("employee")}
-          className="erp-panel flex h-80 w-72 cursor-pointer flex-col items-center justify-center text-white transition duration-300 hover:-translate-y-2 hover:bg-white/20"
+          className="erp-panel flex h-80 w-72 cursor-pointer flex-col items-center justify-center text-white transition-colors duration-150 hover:bg-white/20"
         >
           <img src={EmployeeIcon} alt="Employee" className="w-20 h-20 mb-4" />
           <h2 className="text-2xl font-semibold">Employee</h2>

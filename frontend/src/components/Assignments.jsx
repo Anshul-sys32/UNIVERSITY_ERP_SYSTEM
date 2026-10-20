@@ -44,7 +44,7 @@ const Assignments = () => {
               <button
                 key={assignment.ASSIGNMENT_ID}
                 onClick={() => setSelected(assignment)}
-                className="erp-panel p-5 text-left text-white transition hover:-translate-y-1 hover:bg-white/20"
+                className="erp-panel p-5 text-left text-white transition-colors duration-150 hover:bg-white/20"
               >
                 <div className="mb-8 flex items-start justify-between gap-3">
                   <span className="text-xs uppercase tracking-wider text-white/60">Assignment</span>
