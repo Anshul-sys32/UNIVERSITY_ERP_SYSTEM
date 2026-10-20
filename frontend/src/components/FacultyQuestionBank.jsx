@@ -1,50 +1,50 @@
-import React, { useState } from "react";
+import { useEffect, useState } from "react";
+import { facultyRequest } from "../api/roleApi";
 
 const FacultyQuestionBank = () => {
   const [questions, setQuestions] = useState([]);
-  const [newQuestion, setNewQuestion] = useState("");
+  const [form, setForm] = useState({ subject: "", questionText: "", questionType: "SHORT_ANSWER", options: [] });
+  const [option, setOption] = useState("");
+  const [error, setError] = useState("");
 
-  const addQuestion = () => {
-    if (newQuestion.trim()) {
-      setQuestions([...questions, newQuestion]);
-      setNewQuestion("");
+  const loadQuestions = async () => {
+    try { setQuestions(await facultyRequest("/questions")); } catch (requestError) { setError(requestError.message); }
+  };
+  useEffect(() => { loadQuestions(); }, []);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    try {
+      await facultyRequest("/questions", { method: "POST", body: JSON.stringify(form) });
+      setForm({ subject: "", questionText: "", questionType: "SHORT_ANSWER", options: [] });
+      await loadQuestions();
+    } catch (requestError) { setError(requestError.message); }
+  };
+
+  const addOption = () => {
+    if (option.trim()) {
+      setForm({ ...form, options: [...form.options, option.trim()] });
+      setOption("");
     }
   };
 
-  const deleteQuestion = (index) => {
-    setQuestions(questions.filter((_, i) => i !== index));
+  const deleteQuestion = async (id) => {
+    try { await facultyRequest(`/questions/${id}`, { method: "DELETE" }); await loadQuestions(); } catch (requestError) { setError(requestError.message); }
   };
 
   return (
-    <div className="p-6 bg-white rounded-xl shadow-lg w-full">
-      <h1 className="text-2xl font-bold mb-4">Faculty Question Bank</h1>
-      
-      {/* Question Input */}
-      <div className="flex gap-2 mb-4">
-        <input
-          type="text"
-          placeholder="Enter your question..."
-          value={newQuestion}
-          onChange={(e) => setNewQuestion(e.target.value)}
-          className="flex-1 px-3 py-2 border rounded"
-        />
-        <button onClick={addQuestion} className="bg-blue-500 text-white px-4 py-2 rounded">
-          Add
-        </button>
-      </div>
-
-      {/* Display Questions */}
-      <ul className="space-y-2">
-        {questions.map((question, index) => (
-          <li key={index} className="flex justify-between bg-gray-100 p-2 rounded">
-            <span>{question}</span>
-            <button onClick={() => deleteQuestion(index)} className="text-red-500">
-              Delete
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <section className="space-y-6">
+      <div><h2 className="text-3xl font-bold">Question bank</h2><p className="mt-2 text-sm text-white/70">Build reusable questions for assessments.</p></div>
+      <form className="erp-panel space-y-4 p-6" onSubmit={handleSubmit}>
+        <div className="grid gap-4 md:grid-cols-2"><input className="erp-input" placeholder="Subject" value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value })} required /><select className="erp-input" value={form.questionType} onChange={(event) => setForm({ ...form, questionType: event.target.value })}><option className="text-black" value="SHORT_ANSWER">Short answer</option><option className="text-black" value="MCQ">Multiple choice</option></select></div>
+        <textarea className="erp-input" placeholder="Question text" value={form.questionText} onChange={(event) => setForm({ ...form, questionText: event.target.value })} required />
+        {form.questionType === "MCQ" && <div className="flex gap-3"><input className="erp-input" placeholder="Add option" value={option} onChange={(event) => setOption(event.target.value)} /><button className="erp-button" onClick={addOption} type="button">Add option</button></div>}
+        {form.options.length > 0 && <div className="flex flex-wrap gap-2">{form.options.map((value) => <span className="rounded-full bg-white/15 px-3 py-1 text-sm" key={value}>{value}</span>)}</div>}
+        <button className="erp-button" type="submit">Save question</button>
+      </form>
+      {error && <p className="rounded-xl bg-yellow-300/15 p-4 text-sm text-yellow-100">{error}</p>}
+      {questions.length ? <div className="space-y-3">{questions.map((question) => <article className="erp-panel p-5" key={question.QUESTION_ID}><div className="flex justify-between gap-4"><span className="text-xs uppercase tracking-wider text-white/60">{question.SUBJECT}</span><button className="text-sm text-red-200" onClick={() => deleteQuestion(question.QUESTION_ID)} type="button">Delete</button></div><p className="mt-3">{question.QUESTION_TEXT}</p></article>)}</div> : <p className="erp-panel p-5 text-white/70">No questions saved yet.</p>}
+    </section>
   );
 };
 

@@ -24,6 +24,7 @@ const PasswordResetPopup = ({ onClose }) => {
       alert("Password reset successfully!");
       onClose();
     } catch (error) {
+      console.error("Password reset error:", error);
       alert("Something went wrong!");
     }
   };

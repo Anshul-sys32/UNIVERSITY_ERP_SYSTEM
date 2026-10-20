@@ -1,75 +1,30 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import { facultyRequest } from "../api/roleApi";
 
 const FormGenerator = () => {
-  const [formTitle, setFormTitle] = useState("Untitled Form");
+  const [formTitle, setFormTitle] = useState("");
   const [questions, setQuestions] = useState([]);
+  const [message, setMessage] = useState("");
 
-  const addQuestion = (type) => {
-    setQuestions([...questions, { id: Date.now(), type, question: "", options: [] }]);
-  };
-
-  const updateQuestion = (id, value) => {
-    setQuestions(questions.map(q => (q.id === id ? { ...q, question: value } : q)));
-  };
-
-  const addOption = (id) => {
-    setQuestions(questions.map(q => (q.id === id ? { ...q, options: [...q.options, ""] } : q)));
-  };
-
-  const updateOption = (qId, optIndex, value) => {
-    setQuestions(questions.map(q =>
-      q.id === qId
-        ? { ...q, options: q.options.map((opt, i) => (i === optIndex ? value : opt)) }
-        : q
-    ));
+  const addQuestion = (type) => setQuestions([...questions, { id: Date.now(), type, question: "", options: [] }]);
+  const updateQuestion = (id, value) => setQuestions(questions.map((question) => question.id === id ? { ...question, question: value } : question));
+  const addOption = (id) => setQuestions(questions.map((question) => question.id === id ? { ...question, options: [...question.options, ""] } : question));
+  const updateOption = (questionId, optionIndex, value) => setQuestions(questions.map((question) => question.id === questionId ? { ...question, options: question.options.map((item, index) => index === optionIndex ? value : item) } : question));
+  const saveForm = async (status) => {
+    try {
+      const data = await facultyRequest("/forms", { method: "POST", body: JSON.stringify({ title: formTitle, questions, status }) });
+      setMessage(data.message);
+    } catch (error) { setMessage(error.message); }
   };
 
   return (
-    <div className="p-6 bg-white rounded-lg shadow-lg">
-      <input
-        type="text"
-        className="w-full p-2 text-lg font-bold border-b"
-        value={formTitle}
-        onChange={(e) => setFormTitle(e.target.value)}
-        placeholder="Form Title"
-      />
-      
-      {questions.map((q, index) => (
-        <div key={q.id} className="mt-4 p-3 border rounded-lg">
-          <input
-            type="text"
-            className="w-full p-2 border-b"
-            value={q.question}
-            onChange={(e) => updateQuestion(q.id, e.target.value)}
-            placeholder={`Question ${index + 1}`}
-          />
-
-          {q.type === "mcq" && (
-            <>
-              {q.options.map((opt, optIndex) => (
-                <div key={optIndex} className="flex items-center mt-2">
-                  <input
-                    type="text"
-                    className="w-full p-2 border"
-                    value={opt}
-                    onChange={(e) => updateOption(q.id, optIndex, e.target.value)}
-                    placeholder={`Option ${optIndex + 1}`}
-                  />
-                </div>
-              ))}
-              <button onClick={() => addOption(q.id)} className="mt-2 text-blue-600">
-                + Add Option
-              </button>
-            </>
-          )}
-        </div>
-      ))}
-
-      <div className="mt-4 space-x-3">
-        <button onClick={() => addQuestion("text")} className="p-2 bg-gray-800 text-white rounded">+ Short Answer</button>
-        <button onClick={() => addQuestion("mcq")} className="p-2 bg-gray-800 text-white rounded">+ Multiple Choice</button>
-      </div>
-    </div>
+    <section className="erp-panel space-y-5 p-6">
+      <div><h2 className="text-3xl font-bold">Form generator</h2><p className="mt-2 text-sm text-white/70">Create reusable forms and publish them when ready.</p></div>
+      <input className="erp-input" value={formTitle} onChange={(event) => setFormTitle(event.target.value)} placeholder="Form title" />
+      {questions.map((question, index) => <div className="rounded-xl border border-white/20 bg-black/10 p-4" key={question.id}><input className="erp-input" value={question.question} onChange={(event) => updateQuestion(question.id, event.target.value)} placeholder={`Question ${index + 1}`} />{question.type === "mcq" && <>{question.options.map((option, optionIndex) => <input className="erp-input mt-3" key={`${question.id}-${optionIndex}`} value={option} onChange={(event) => updateOption(question.id, optionIndex, event.target.value)} placeholder={`Option ${optionIndex + 1}`} />)}<button className="mt-3 text-sm text-white/70 hover:text-white" onClick={() => addOption(question.id)} type="button">+ Add option</button></>}</div>)}
+      <div className="flex flex-wrap gap-3"><button className="erp-button" onClick={() => addQuestion("text")} type="button">+ Short answer</button><button className="erp-button" onClick={() => addQuestion("mcq")} type="button">+ Multiple choice</button><button className="rounded-xl border border-white/30 px-5 py-3 font-semibold hover:bg-white/15" disabled={!formTitle.trim()} onClick={() => saveForm("DRAFT")} type="button">Save draft</button><button className="rounded-xl bg-yellow-300 px-5 py-3 font-semibold text-slate-900 hover:bg-yellow-200" disabled={!formTitle.trim()} onClick={() => saveForm("PUBLISHED")} type="button">Publish</button></div>
+      {message && <p className="rounded-lg bg-white/10 p-3 text-sm text-white/80">{message}</p>}
+    </section>
   );
 };
 

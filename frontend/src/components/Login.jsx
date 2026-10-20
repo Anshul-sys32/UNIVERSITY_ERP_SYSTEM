@@ -21,30 +21,37 @@ function Login() {
         }}
       >
         {/* Faculty Card */}
+        <div className="absolute left-6 top-6 text-white">
+          <p className="text-xs uppercase tracking-[0.35em] text-white/70">University ERP</p>
+          <h1 className="mt-2 text-2xl font-bold">One campus. One workspace.</h1>
+        </div>
         <div
           onClick={() => handleSelection("faculty")}
-          className="w-72 h-80 bg-white/10 border border-white/20 backdrop-blur-xl rounded-2xl flex flex-col items-center justify-center text-white cursor-pointer hover:scale-105 transition-all duration-300"
+          className="erp-panel flex h-80 w-72 cursor-pointer flex-col items-center justify-center text-white transition duration-300 hover:-translate-y-2 hover:bg-white/20"
         >
           <img src={FacultyIcon} alt="Faculty" className="w-20 h-20 mb-4" />
-          <h2 className="text-3xl font-semibold">Faculty</h2>
+          <h2 className="text-2xl font-semibold">Faculty</h2>
+          <p className="mt-2 text-sm text-white/70">Teach, assess and guide</p>
         </div>
 
         {/* Student Card */}
         <div
           onClick={() => handleSelection("student")}
-          className="w-72 h-80 bg-white/10 border border-white/20 backdrop-blur-xl rounded-2xl flex flex-col items-center justify-center text-white cursor-pointer hover:scale-105 transition-all duration-300"
+          className="erp-panel flex h-80 w-72 cursor-pointer flex-col items-center justify-center text-white transition duration-300 hover:-translate-y-2 hover:bg-white/20"
         >
           <img src={StudentIcon} alt="Student" className="w-20 h-20 mb-4" />
-          <h2 className="text-3xl font-semibold">Student</h2>
+          <h2 className="text-2xl font-semibold">Student</h2>
+          <p className="mt-2 text-sm text-white/70">Learn, track and grow</p>
         </div>
 
         {/* Employee Card */}
         <div
           onClick={() => handleSelection("employee")}
-          className="w-72 h-80 bg-white/10 border border-white/20 backdrop-blur-xl rounded-2xl flex flex-col items-center justify-center text-white cursor-pointer hover:scale-105 transition-all duration-300"
+          className="erp-panel flex h-80 w-72 cursor-pointer flex-col items-center justify-center text-white transition duration-300 hover:-translate-y-2 hover:bg-white/20"
         >
           <img src={EmployeeIcon} alt="Employee" className="w-20 h-20 mb-4" />
-          <h2 className="text-3xl font-semibold">Employee</h2>
+          <h2 className="text-2xl font-semibold">Employee</h2>
+          <p className="mt-2 text-sm text-white/70">Operate the campus</p>
         </div>
       </div>
 

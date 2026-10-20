@@ -18,6 +18,7 @@ import FacultyAssignments from "./components/FacultyAssignments";
 import FacultyQuestionBank from "./components/FacultyQuestionBank";
 import Result from "./components/Result";
 import Feedback from "./components/Feedback";
+import FormGenerator from "./components/FormGenerator";
 
 function App() {
   return (
@@ -39,8 +40,10 @@ function App() {
 
         {/* Faculty Dashboard + Nested Routes */}
         <Route path="/erp/faculty" element={<FacultyDashboard />}>
+          <Route path="form-generator" element={<FormGenerator />} />
           <Route path="assignments" element={<FacultyAssignments />} />
           <Route path="question-bank" element={<FacultyQuestionBank />} />
+          <Route path="manage-students" element={<ManageStudents />} />
         </Route>
 
         {/* Employee Dashboard */}

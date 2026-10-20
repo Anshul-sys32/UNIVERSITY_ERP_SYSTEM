@@ -1,142 +1,32 @@
-import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
-
-const initialConfigs = {
-  student: {
-    background: "linear-gradient(300deg,rgba(67,10,199,0.96),rgba(255,35,15,0.95))",
-    sidebarItems: [
-      { label: "Dashboard", path: "/erp/student" },
-      { label: "Assignments", path: "/erp/student/assignments" },
-      { label: "Fee Details", path: "/erp/student/fees" },
-      { label: "Library Details", path: "/erp/student/library" },
-    ],
-  },
-  faculty: {
-    background: "linear-gradient(300deg,rgba(0,0,0,0.8),rgba(255,165,0,0.8))",
-    sidebarItems: [
-      { label: "Dashboard", path: "/erp/faculty" },
-      { label: "Assignments", path: "/erp/faculty/assignments" },
-    ],
-  },
-  staff: {
-    background: "linear-gradient(300deg,rgba(0,0,0,0.8),rgba(0,255,255,0.8))",
-    sidebarItems: [
-      { label: "Dashboard", path: "/erp/staff" },
-      { label: "Attendance", path: "/erp/staff/attendance" },
-    ],
-  },
-};
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { employeeRequest } from "../api/roleApi";
 
 const DashboardConfigEditor = () => {
-  const { type } = useParams(); // student / faculty / staff
+  const { type } = useParams();
+  const navigate = useNavigate();
   const [config, setConfig] = useState(null);
-  const [newSidebarLabel, setNewSidebarLabel] = useState("");
-  const [newSidebarPath, setNewSidebarPath] = useState("");
+  const [label, setLabel] = useState("");
+  const [path, setPath] = useState("");
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    if (type && initialConfigs[type]) {
-      setConfig(initialConfigs[type]);
-    }
+    employeeRequest(`/config/${type}`).then(setConfig).catch((error) => setMessage(error.message));
   }, [type]);
 
-  if (!config) {
-    return <div className="text-center text-white p-10">Invalid dashboard type!</div>;
-  }
-
-  const handleBackgroundChange = (e) => {
-    setConfig((prev) => ({
-      ...prev,
-      background: e.target.value,
-    }));
+  const save = async () => {
+    try {
+      const data = await employeeRequest(`/config/${type}`, { method: "PUT", body: JSON.stringify(config) });
+      setMessage(data.message);
+    } catch (error) { setMessage(error.message); }
   };
 
-  const handleAddSidebarItem = () => {
-    if (newSidebarLabel.trim() && newSidebarPath.trim()) {
-      setConfig((prev) => ({
-        ...prev,
-        sidebarItems: [...prev.sidebarItems, { label: newSidebarLabel, path: newSidebarPath }],
-      }));
-      setNewSidebarLabel("");
-      setNewSidebarPath("");
-    }
-  };
-
-  const handleRemoveSidebarItem = (index) => {
-    setConfig((prev) => ({
-      ...prev,
-      sidebarItems: prev.sidebarItems.filter((_, idx) => idx !== index),
-    }));
-  };
+  if (!config) return <main className="min-h-screen p-8 text-white erp-gradient"><p>{message || "Loading configuration…"}</p></main>;
 
   return (
-    <div
-      className="min-h-screen p-6 flex flex-col gap-8"
-      style={{
-        background: config.background,
-      }}
-    >
-      <h1 className="text-3xl text-white text-center font-bold">
-        Editing {type.charAt(0).toUpperCase() + type.slice(1)} Dashboard
-      </h1>
-
-      {/* Background Color Changer */}
-      <div className="bg-white/20 backdrop-blur-md p-6 rounded-lg max-w-lg mx-auto">
-        <h2 className="text-xl text-white mb-4">Background</h2>
-        <input
-          type="text"
-          placeholder="Enter background (color or gradient)"
-          value={config.background}
-          onChange={handleBackgroundChange}
-          className="w-full p-2 rounded bg-white text-black"
-        />
-      </div>
-
-      {/* Sidebar Manager */}
-      <div className="bg-white/20 backdrop-blur-md p-6 rounded-lg max-w-lg mx-auto">
-        <h2 className="text-xl text-white mb-4">Sidebar Items</h2>
-
-        <ul className="space-y-2">
-          {config.sidebarItems.map((item, index) => (
-            <li
-              key={index}
-              className="flex justify-between items-center text-white bg-white/10 p-2 rounded"
-            >
-              <span>{item.label} ({item.path})</span>
-              <button
-                onClick={() => handleRemoveSidebarItem(index)}
-                className="bg-red-600 text-white px-2 rounded hover:bg-red-800"
-              >
-                Delete
-              </button>
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-4 flex flex-col gap-2">
-          <input
-            type="text"
-            placeholder="New Item Label"
-            value={newSidebarLabel}
-            onChange={(e) => setNewSidebarLabel(e.target.value)}
-            className="p-2 rounded bg-white text-black"
-          />
-          <input
-            type="text"
-            placeholder="New Item Path"
-            value={newSidebarPath}
-            onChange={(e) => setNewSidebarPath(e.target.value)}
-            className="p-2 rounded bg-white text-black"
-          />
-          <button
-            onClick={handleAddSidebarItem}
-            className="mt-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-800"
-          >
-            Add Sidebar Item
-          </button>
-        </div>
-      </div>
-
-    </div>
+    <main className="min-h-screen p-5 text-white sm:p-8 erp-gradient" style={{ background: config.background }}>
+      <div className="mx-auto max-w-3xl"><button className="mb-6 text-sm text-white/70 hover:text-white" onClick={() => navigate("/erp/employee")} type="button">← Back to employee dashboard</button><h1 className="text-3xl font-bold">Configure {type} dashboard</h1><div className="erp-panel mt-6 space-y-5 p-6"><label className="block text-sm">Background<input className="erp-input mt-2" value={config.background} onChange={(event) => setConfig({ ...config, background: event.target.value })} /></label><div><h2 className="mb-3 text-lg font-semibold">Sidebar items</h2><div className="space-y-2">{config.sidebarItems.map((item, index) => <div className="flex items-center gap-3" key={`${item.path}-${index}`}><span className="flex-1 rounded-lg bg-white/10 px-3 py-2 text-sm">{item.label} · {item.path}</span><button className="text-sm text-red-200" onClick={() => setConfig({ ...config, sidebarItems: config.sidebarItems.filter((_, itemIndex) => itemIndex !== index) })} type="button">Remove</button></div>)}</div></div><div className="grid gap-3 md:grid-cols-2"><input className="erp-input" placeholder="Item label" value={label} onChange={(event) => setLabel(event.target.value)} /><input className="erp-input" placeholder="Item path" value={path} onChange={(event) => setPath(event.target.value)} /></div><button className="rounded-xl border border-white/30 px-4 py-3 text-sm hover:bg-white/15" onClick={() => { if (label.trim() && path.trim()) { setConfig({ ...config, sidebarItems: [...config.sidebarItems, { label: label.trim(), path: path.trim() }] }); setLabel(""); setPath(""); } }} type="button">Add sidebar item</button><div><button className="erp-button" onClick={save} type="button">Save configuration</button></div>{message && <p className="rounded-lg bg-white/10 p-3 text-sm">{message}</p>}</div></div>
+    </main>
   );
 };
 

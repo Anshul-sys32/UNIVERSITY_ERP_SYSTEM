@@ -1,43 +1,37 @@
+import { useEffect, useState } from "react";
+import { fetchStudentResource, formatDate } from "../api/studentApi";
+import StudentDataState from "./StudentDataState";
+
 const EventsPlacement = () => {
-  const events = [
-    { id: 1, title: "Tech Fest 2025", date: "2025-04-15", location: "Main Auditorium", type: "Event" },
-    { id: 2, title: "Google Campus Drive", date: "2025-04-20", location: "Placement Hall", type: "Placement" },
-    { id: 3, title: "AI Workshop", date: "2025-04-25", location: "Lab 3", type: "Event" },
-    { id: 4, title: "Microsoft Internship Interviews", date: "2025-05-01", location: "Placement Office", type: "Placement" }
-  ];
+  const [events, setEvents] = useState([]);
+  const [state, setState] = useState({ loading: true, error: "" });
+
+  useEffect(() => {
+    fetchStudentResource("events")
+      .then(setEvents)
+      .catch((error) => setState({ loading: false, error: error.message }))
+      .finally(() => setState((current) => ({ ...current, loading: false })));
+  }, []);
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4 text-white">Events & Placement</h2>
-      <div className="bg-white/10 p-6 rounded-lg backdrop-blur-lg border border-white/20">
-        <table className="w-full border-collapse bg-transparent">
-          <thead>
-            <tr className="text-white">
-              <th className="p-3 border-b border-white/20 text-left">Title</th>
-              <th className="p-3 border-b border-white/20 text-left">Date</th>
-              <th className="p-3 border-b border-white/20 text-left">Location</th>
-              <th className="p-3 border-b border-white/20 text-left">Type</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((event) => (
-              <tr key={event.id} className="text-white hover:bg-white/10 transition-all">
-                <td className="p-3 border-b border-white/20">{event.title}</td>
-                <td className="p-3 border-b border-white/20">{event.date}</td>
-                <td className="p-3 border-b border-white/20">{event.location}</td>
-                <td
-                  className={`p-3 border-b border-white/20 font-semibold ${
-                    event.type === "Event" ? "text-blue-400" : "text-green-400"
-                  }`}
-                >
-                  {event.type}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <section className="p-6">
+      <h2 className="mb-2 text-3xl font-bold text-white">Events & placement</h2>
+      <p className="mb-6 text-sm text-white/70">Discover what is happening across campus.</p>
+      <StudentDataState {...state} empty={!events.length}>
+        <div className="grid gap-5 md:grid-cols-2">
+          {events.map((event) => (
+            <article className="erp-panel p-5 text-white" key={event.EVENT_ID}>
+              <div className="flex items-start justify-between gap-4">
+                <h3 className="text-lg font-semibold">{event.TITLE}</h3>
+                <span className="rounded-full bg-white/15 px-3 py-1 text-xs">{event.TYPE}</span>
+              </div>
+              <p className="mt-4 text-sm text-white/75">{formatDate(event.EVENT_DATE)} · {event.LOCATION || "Campus"}</p>
+              {event.DESCRIPTION && <p className="mt-3 text-sm leading-6 text-white/65">{event.DESCRIPTION}</p>}
+            </article>
+          ))}
+        </div>
+      </StudentDataState>
+    </section>
   );
 };
 

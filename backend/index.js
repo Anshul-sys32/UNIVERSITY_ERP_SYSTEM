@@ -1,16 +1,23 @@
 const express = require("express");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const cors = require("cors");
 const pool = require("./db");
 const studentRoutes = require("./routes/students");
+const studentDataRoutes = require("./routes/studentData");
+const facultyDataRoutes = require("./routes/facultyData");
+const employeeDataRoutes = require("./routes/employeeData");
 const app = express();
-const PORT = 5000;
+const PORT = Number(process.env.PORT || 5000);
 
 app.use(cors());
 app.use(express.json());
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 
 app.use("/students", studentRoutes);
+app.use("/student-data", studentDataRoutes);
+app.use("/faculty-data", facultyDataRoutes);
+app.use("/employee-data", employeeDataRoutes);
 
 
 app.post("/login", async (req, res) => {
@@ -22,9 +29,10 @@ app.post("/login", async (req, res) => {
   }
 
   try {
-    const conn = await pool.getConnection();
-    const rows = await conn.query("SELECT * FROM USERS WHERE username = ? AND is_active = 1", [username]);
-    conn.release();
+    const rows = await pool.query(
+      "SELECT USER_ID, USERNAME, PASSWORD_HASH, ROLE FROM USERS WHERE USERNAME = ? AND IS_ACTIVE = 1",
+      [username.trim()],
+    );
 
     if (rows.length === 0) {
       return res.status(401).json({ message: "User not found or inactive." });
@@ -61,37 +69,37 @@ app.post("/login", async (req, res) => {
 
 app.post("/register", async (req, res) => {
     const { username, password, role } = req.body;
+    const normalizedRole = typeof role === "string" ? role.toUpperCase() : "";
+    const validRoles = ["STUDENT", "FACULTY", "EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"];
   
-    if (!username || !password || !role) {
+    if (!username || !password || !validRoles.includes(normalizedRole)) {
       return res.status(400).json({ message: "Missing required fields." });
     }
   
     try {
-      const conn = await pool.getConnection();
-  
-      // Check if user already exists
-      const existing = await conn.query("SELECT * FROM USERS WHERE USERNAME = ?", [username]);
+      const existing = await pool.query("SELECT USER_ID FROM USERS WHERE USERNAME = ?", [username.trim()]);
       if (existing.length > 0) {
-        conn.release();
         return res.status(409).json({ message: "User already exists." });
       }
   
       const hashedPassword = await bcrypt.hash(password, 10);
   
-      await conn.query(
+      await pool.query(
         "INSERT INTO USERS (USERNAME, PASSWORD_HASH, ROLE) VALUES (?, ?, ?)",
-        [username, hashedPassword, role] 
+        [username.trim(), hashedPassword, normalizedRole],
       );
-  
-      conn.release();
-  
+
       res.status(201).json({ message: "User registered successfully." });
     } catch (err) {
       console.error("Register error:", err);
       res.status(500).json({ message: "Internal server error." });
     }
   });
-  
+
+app.use((err, _req, res, _next) => {
+  console.error("Unhandled server error:", err);
+  res.status(500).json({ message: "Internal server error." });
+});
 
 
 app.listen(PORT, () => {

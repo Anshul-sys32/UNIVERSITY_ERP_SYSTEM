@@ -1,236 +1,114 @@
-import { useState } from "react";
-import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { dashboardSettings } from "../config/dashboardConfig";  // 🚀 New
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { dashboardSettings } from "../config/dashboardConfig";
+import { fetchStudentResource } from "../api/studentApi";
 import BellIcon from "../assets/icons/bell.png";
 import UserIcon from "../assets/icons/profile.png";
-import SettingsIcon from "../assets/icons/settings.png";
 import ExitIcon from "../assets/icons/logout.png";
+import StudentDataState from "./StudentDataState";
 
 const Card = ({ title, children }) => (
-  <div className="bg-white/10 p-4 rounded-2xl border border-white/20">
-    <h2 className="text-lg font-semibold mb-3 text-white">{title}</h2>
+  <div className="erp-panel p-5 text-white">
+    <h2 className="mb-4 text-lg font-semibold">{title}</h2>
     {children}
   </div>
 );
 
 const CircularProgress = ({ value }) => {
-  const percentage = Math.min(Math.max(value, 0), 100);
+  const percentage = Math.min(Math.max(Number(value || 0), 0), 100);
   const radius = 20;
-  const strokeWidth = 4;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (percentage / 100) * circumference;
-
   return (
-    <div className="relative w-28 h-28 mx-auto">
-      <svg width="100%" height="100%" viewBox="0 0 48 48" className="rotate-90">
-        <circle
-          cx="24"
-          cy="24"
-          r={radius}
-          stroke="rgba(255, 255, 255, 0.1)"
-          strokeWidth={strokeWidth}
-          fill="transparent"
-        />
-        <circle
-          cx="24"
-          cy="24"
-          r={radius}
-          stroke="white"
-          strokeWidth={strokeWidth}
-          fill="transparent"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          style={{ transition: "stroke-dashoffset 0.35s" }}
-        />
+    <div className="relative mx-auto h-28 w-28">
+      <svg className="rotate-90" width="100%" height="100%" viewBox="0 0 48 48">
+        <circle cx="24" cy="24" r={radius} stroke="rgba(255,255,255,0.15)" strokeWidth="4" fill="transparent" />
+        <circle cx="24" cy="24" r={radius} stroke="white" strokeWidth="4" fill="transparent" strokeDasharray={circumference} strokeDashoffset={circumference - (percentage / 100) * circumference} />
       </svg>
-      <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center">
-        <span className="text-white font-bold text-lg">{percentage}%</span>
-      </div>
+      <span className="absolute inset-0 flex items-center justify-center font-bold">{percentage.toFixed(0)}%</span>
     </div>
   );
 };
-
-const CalendarCard = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayOfMonth = new Date(year, month, 1).getDay();
-  const currentDate = today.getDate();
-  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-  return (
-    <Card title="Calendar">
-      <div className="grid grid-cols-7 gap-x-0 gap-y-3 text-center text-[11px] text-white">
-        {weekdays.map((day) => (
-          <div key={day} className="font-semibold">{day}</div>
-        ))}
-        {Array.from({ length: firstDayOfMonth }).map((_, idx) => (
-          <div key={`empty-${idx}`} />
-        ))}
-        {Array.from({ length: daysInMonth }, (_, i) => {
-          const date = i + 1;
-          const dateObj = new Date(year, month, date);
-          const dayOfWeek = dateObj.getDay();
-          const isPast = date < currentDate;
-
-          return (
-            <div
-              key={date}
-              className={`w-9 h-9 mx-auto rounded-full flex flex-col items-center justify-center 
-              ${dayOfWeek === 0 ? "bg-orange-500" : "bg-white"} ${isPast ? "opacity-40" : ""} text-black leading-tight`}
-            >
-              <span className="text-sm">{date}</span>
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-};
-
-const Sidebar = ({ items }) => (
-  <div className="bg-white/20 p-6 rounded-2xl h-[420px] w-64 ml-6 mt-10">
-    <ul className="text-white divide-y divide-white/30">
-      {items.map((item) => (
-        <li key={item.path} className="py-3">
-          <NavLink
-            to={item.path}
-            className={({ isActive }) =>
-              `flex justify-center items-center gap-2 ${isActive ? "font-bold text-white" : ""}`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && <span className="text-white text-xl leading-none">•</span>}
-                <span>{item.label}</span>
-              </>
-            )}
-          </NavLink>
-        </li>
-      ))}
-    </ul>
-  </div>
-);
-
-const SettingsModal = ({ onClose }) => {
-  const [newPassword, setNewPassword] = useState("");
-
-  const handleReset = () => {
-    alert(`New password: ${newPassword}`);
-    setNewPassword("");
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-      <div className="bg-white rounded-lg p-6 w-[300px]">
-        <h2 className="text-xl font-semibold mb-4 text-black">Reset Password</h2>
-        <input
-          type="password"
-          placeholder="New Password"
-          className="w-full mb-4 px-2 py-1 border rounded text-black"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-        />
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-1 text-white bg-gray-500 rounded hover:bg-gray-700"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleReset}
-            className="px-4 py-1 text-white bg-blue-600 rounded hover:bg-blue-800"
-          >
-            Reset
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const SettingsCard = ({ onOpenModal, onLogout }) => (
-  <div className="ml-6 mt-4 w-64">
-    <Card>
-      <div className="flex justify-center items-center gap-6">
-        <img
-          src={SettingsIcon}
-          alt="Settings"
-          className="w-8 h-8 cursor-pointer hover:opacity-80"
-          onClick={onOpenModal}
-        />
-        <img
-          src={ExitIcon}
-          alt="Exit"
-          className="w-8 h-8 cursor-pointer hover:opacity-80"
-          onClick={onLogout}
-        />
-      </div>
-    </Card>
-  </div>
-);
 
 const StudentDashboard = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [dashboard, setDashboard] = useState(null);
+  const [state, setState] = useState({ loading: true, error: "" });
+  const settings = dashboardSettings.student;
+
+  useEffect(() => {
+    fetchStudentResource("dashboard")
+      .then(setDashboard)
+      .catch((error) => setState({ loading: false, error: error.message }))
+      .finally(() => setState((current) => ({ ...current, loading: false })));
+  }, []);
+
   const isDashboard = location.pathname === "/erp/student";
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const currentSettings = dashboardSettings.student; // 🔥 config from file
-
-  const handleLogout = () => {
-    navigate("/");
-  };
+  const student = dashboard?.student;
+  const attendance = dashboard?.attendance || { TODAY_PERCENT: 0, OVERALL_PERCENT: 0 };
+  const assignments = dashboard?.assignments || [];
+  const results = dashboard?.results || [];
 
   return (
-    <div
-      className="min-h-screen flex"
-      style={{ background: currentSettings.background }}
-    >
-      <div className="mt-6 flex flex-col">
-        <Sidebar items={currentSettings.sidebarItems} />
-        <SettingsCard onOpenModal={() => setIsModalOpen(true)} onLogout={handleLogout} />
-      </div>
-
-      <div className="border-l-2 border-white/20 h-full"></div>
-
-      <div className="flex-1 p-6 overflow-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl text-white">{currentSettings.title || "Dashboard"}</h1>
-          <div className="flex gap-4 items-center">
-            <img src={BellIcon} alt="Notifications" className="w-10 h-10 cursor-pointer hover:opacity-80" />
-            <img src={UserIcon} alt="User Profile" className="w-10 h-10 cursor-pointer hover:opacity-80" />
+    <div className="min-h-screen text-white" style={{ background: settings.background }}>
+      <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col md:flex-row">
+        <aside className="w-full border-b border-white/20 bg-black/10 p-5 md:w-72 md:border-b-0 md:border-r md:p-6">
+          <div className="mb-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-white/60">University ERP</p>
+            <h1 className="mt-2 text-2xl font-bold">Student portal</h1>
           </div>
-        </div>
+          <nav className="grid grid-cols-2 gap-2 md:block md:space-y-1">
+            {settings.sidebarItems.map((item) => (
+              <NavLink
+                className={({ isActive }) => `block rounded-xl px-4 py-3 text-sm transition ${isActive ? "bg-white text-slate-900 font-semibold" : "text-white/75 hover:bg-white/15 hover:text-white"}`}
+                end={item.path === "/erp/student"}
+                key={item.path}
+                to={item.path}
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+          <button className="mt-6 flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-white/75 hover:bg-white/15 hover:text-white" onClick={() => { sessionStorage.removeItem("erpUser"); navigate("/"); }} type="button">
+            <img src={ExitIcon} alt="" className="h-6 w-6" /> Sign out
+          </button>
+        </aside>
 
-        <Outlet />
-
-        {isDashboard && currentSettings.showDefaultWidgets && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <Card title="Today's Schedule">
-                {/* Your schedule here */}
-              </Card>
-              <CalendarCard />
+        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+          <header className="mb-8 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-white/60">Student workspace</p>
+              <h2 className="mt-1 text-2xl font-bold sm:text-3xl">{student ? `Welcome, ${student.FIRST_NAME}` : "Welcome back"}</h2>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card title="Today's Attendance">
-                <CircularProgress value={70} />
-              </Card>
-
-              <Card title="Overall Attendance">
-                <CircularProgress value={82.5} />
-              </Card>
+            <div className="flex gap-3">
+              <button className="rounded-xl bg-white/10 p-3 hover:bg-white/20" title="Notifications" type="button"><img src={BellIcon} alt="Notifications" className="h-7 w-7" /></button>
+              <button className="rounded-xl bg-white/10 p-3 hover:bg-white/20" title="Profile" type="button"><img src={UserIcon} alt="Profile" className="h-7 w-7" /></button>
             </div>
-          </>
-        )}
+          </header>
+
+          {isDashboard ? (
+            <StudentDataState {...state} empty={!dashboard}>
+              <div className="mb-6 grid gap-4 sm:grid-cols-3">
+                <Card title="Roll number"><p className="text-2xl font-bold">{student?.ROLL_NUMBER || "—"}</p></Card>
+                <Card title="Semester"><p className="text-2xl font-bold">{student?.CURRENT_SEMESTER || "—"}</p></Card>
+                <Card title="Batch year"><p className="text-2xl font-bold">{student?.BATCH_YEAR || "—"}</p></Card>
+              </div>
+              <div className="grid gap-5 lg:grid-cols-2">
+                <Card title="Attendance today"><CircularProgress value={attendance.TODAY_PERCENT} /></Card>
+                <Card title="Overall attendance"><CircularProgress value={attendance.OVERALL_PERCENT} /></Card>
+              </div>
+              <div className="mt-5 grid gap-5 lg:grid-cols-2">
+                <Card title="Upcoming assignments">
+                  {assignments.length ? <div className="space-y-3">{assignments.map((assignment) => <div className="flex items-center justify-between gap-4 border-b border-white/15 pb-3 text-sm last:border-0 last:pb-0" key={assignment.ASSIGNMENT_ID}><span>{assignment.TITLE}</span><span className="text-white/60">{assignment.STATUS}</span></div>)}</div> : <p className="text-sm text-white/60">No upcoming assignments.</p>}
+                </Card>
+                <Card title="Latest results">
+                  {results.length ? <div className="space-y-3">{results.map((result) => <div className="flex items-center justify-between gap-4 border-b border-white/15 pb-3 text-sm last:border-0 last:pb-0" key={`${result.SUBJECT}-${result.SCORE}`}><span>{result.SUBJECT}</span><span className="font-semibold">{result.SCORE}/{result.MAX_SCORE}</span></div>)}</div> : <p className="text-sm text-white/60">No results published.</p>}
+                </Card>
+              </div>
+            </StudentDataState>
+          ) : <Outlet />}
+        </main>
       </div>
-
-      {isModalOpen && <SettingsModal onClose={() => setIsModalOpen(false)} />}
     </div>
   );
 };

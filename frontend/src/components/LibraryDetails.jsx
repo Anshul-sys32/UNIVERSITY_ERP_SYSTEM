@@ -1,42 +1,38 @@
+import { useEffect, useState } from "react";
+import { fetchStudentResource, formatDate } from "../api/studentApi";
+import StudentDataState from "./StudentDataState";
+
 const LibraryDetails = () => {
-  const booksIssued = [
-    { id: 1, title: "Operating Systems", issueDate: "2025-03-01", returnDate: "2025-03-30", status: "Returned" },
-    { id: 2, title: "Data Structures & Algorithms", issueDate: "2025-03-05", returnDate: "2025-04-05", status: "Pending" },
-    { id: 3, title: "Computer Networks", issueDate: "2025-03-10", returnDate: "2025-04-10", status: "Pending" }
-  ];
+  const [books, setBooks] = useState([]);
+  const [state, setState] = useState({ loading: true, error: "" });
+
+  useEffect(() => {
+    fetchStudentResource("library")
+      .then(setBooks)
+      .catch((error) => setState({ loading: false, error: error.message }))
+      .finally(() => setState((current) => ({ ...current, loading: false })));
+  }, []);
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4 text-white">Library Details</h2>
-      <div className="bg-white/10 p-6 rounded-lg backdrop-blur-lg border border-white/20">
-        <table className="w-full border-collapse bg-transparent">
-          <thead>
-            <tr className="text-white">
-              <th className="p-3 border-b border-white/20 text-left">Book Title</th>
-              <th className="p-3 border-b border-white/20 text-left">Issue Date</th>
-              <th className="p-3 border-b border-white/20 text-left">Return Date</th>
-              <th className="p-3 border-b border-white/20 text-left">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {booksIssued.map((book) => (
-              <tr key={book.id} className="text-white hover:bg-white/10 transition-all">
-                <td className="p-3 border-b border-white/20">{book.title}</td>
-                <td className="p-3 border-b border-white/20">{book.issueDate}</td>
-                <td className="p-3 border-b border-white/20">{book.returnDate}</td>
-                <td
-                  className={`p-3 border-b border-white/20 font-semibold ${
-                    book.status === "Returned" ? "text-green-400" : "text-yellow-400"
-                  }`}
-                >
-                  {book.status}
-                </td>
+    <section className="p-6">
+      <h2 className="mb-2 text-3xl font-bold text-white">Library details</h2>
+      <p className="mb-6 text-sm text-white/70">Track books issued to your account.</p>
+      <StudentDataState {...state} empty={!books.length}>
+        <div className="overflow-x-auto rounded-2xl border border-white/20 bg-white/10">
+          <table className="w-full min-w-[640px] text-left text-sm text-white">
+            <thead><tr>{["Book title", "Issue date", "Return date", "Status"].map((heading) => <th className="p-4" key={heading}>{heading}</th>)}</tr></thead>
+            <tbody>{books.map((book) => (
+              <tr className="border-t border-white/15" key={book.ISSUE_ID}>
+                <td className="p-4 font-medium">{book.TITLE}</td>
+                <td className="p-4 text-white/75">{formatDate(book.ISSUE_DATE)}</td>
+                <td className="p-4 text-white/75">{formatDate(book.RETURN_DATE)}</td>
+                <td className={`p-4 font-semibold ${book.STATUS === "RETURNED" ? "text-green-300" : book.STATUS === "OVERDUE" ? "text-red-200" : "text-yellow-200"}`}>{book.STATUS}</td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+            ))}</tbody>
+          </table>
+        </div>
+      </StudentDataState>
+    </section>
   );
 };
 

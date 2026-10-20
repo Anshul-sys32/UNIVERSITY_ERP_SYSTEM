@@ -1,34 +1,40 @@
-import React from "react";
-
-const Card = ({ title, children }) => (
-  <div className="bg-white/10 p-4 rounded-2xl border border-white/20">
-    <h2 className="text-lg font-semibold mb-3 text-white">{title}</h2>
-    {children}
-  </div>
-);
+import { useEffect, useState } from "react";
+import { fetchStudentResource } from "../api/studentApi";
+import StudentDataState from "./StudentDataState";
 
 const Result = () => {
+  const [results, setResults] = useState([]);
+  const [state, setState] = useState({ loading: true, error: "" });
+
+  useEffect(() => {
+    fetchStudentResource("results")
+      .then(setResults)
+      .catch((error) => setState({ loading: false, error: error.message }))
+      .finally(() => setState((current) => ({ ...current, loading: false })));
+  }, []);
+
   return (
-    <Card title="All Results">
-      <div className="text-white text-sm space-y-2">
-        <div className="flex justify-between border-b border-white/30 py-1">
-          <span>Big Data</span>
-          <span className="font-semibold">88%</span>
+    <section className="p-6">
+      <h2 className="mb-2 text-3xl font-bold text-white">Results</h2>
+      <p className="mb-6 text-sm text-white/70">Review marks across semesters.</p>
+      <StudentDataState {...state} empty={!results.length}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {results.map((result) => {
+            const percentage = (Number(result.SCORE) / Number(result.MAX_SCORE || 100)) * 100;
+            return (
+              <article className="erp-panel p-5 text-white" key={result.RESULT_ID}>
+                <div className="flex items-center justify-between gap-4">
+                  <div><h3 className="font-semibold">{result.SUBJECT}</h3><p className="mt-1 text-sm text-white/60">Semester {result.SEMESTER || "—"}</p></div>
+                  <strong className="text-2xl">{percentage.toFixed(1)}%</strong>
+                </div>
+                <div className="mt-4 h-2 rounded-full bg-white/15"><div className="h-2 rounded-full bg-white" style={{ width: `${Math.min(percentage, 100)}%` }} /></div>
+                <p className="mt-2 text-sm text-white/65">{result.SCORE} / {result.MAX_SCORE}</p>
+              </article>
+            );
+          })}
         </div>
-        <div className="flex justify-between border-b border-white/30 py-1">
-          <span>AEC - III</span>
-          <span className="font-semibold">72%</span>
-        </div>
-        <div className="flex justify-between border-b border-white/30 py-1">
-          <span>Software Testing</span>
-          <span className="font-semibold">79%</span>
-        </div>
-        <div className="flex justify-between border-b border-white/30 py-1">
-          <span>Library</span>
-          <span className="font-semibold">100%</span>
-        </div>
-      </div>
-    </Card>
+      </StudentDataState>
+    </section>
   );
 };
 
