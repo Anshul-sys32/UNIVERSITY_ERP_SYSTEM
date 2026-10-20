@@ -1,8 +1,42 @@
-# React + Vite
+# UNIVERSITY ERP SYSTEM
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This repository now contains both applications under separate top-level directories:
 
-Currently, two official plugins are available:
+- `frontend/` - React + Vite client application (previous `main` branch contents)
+- `backend/` - Express/MariaDB API service (previous `backend` branch contents)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Other frontend scripts:
+
+```bash
+npm run build
+npm run lint
+npm run preview
+```
+
+## Backend
+
+```bash
+cd backend
+npm install
+node index.js
+```
+
+Backend environment variables are configured in `backend/.env`:
+
+- `DB_HOST`
+- `DB_USER`
+- `DB_PASSWORD`
+- `DB_NAME`
+
+## Notes
+
+- Install dependencies separately in each directory.
+- Keep frontend and backend package manifests in their respective folders.
