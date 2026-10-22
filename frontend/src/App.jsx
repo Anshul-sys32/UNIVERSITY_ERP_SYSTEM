@@ -23,6 +23,7 @@ import Accounting from "./components/Accounting";
 import LibraryManagement from "./components/LibraryManagement";
 import PlacementManagement from "./components/PlacementManagement";
 import StudentAcademics from "./components/StudentAcademics";
+import StudentProfile from "./components/StudentProfile";
 import FacultyAttendance from "./components/FacultyAttendance";
 import FacultyTimetable from "./components/FacultyTimetable";
 import AcademicCourseManagement from "./components/AcademicCourseManagement";
@@ -38,6 +39,7 @@ function App() {
         {/* Student Dashboard + Nested Routes */}
         <Route element={<ProtectedRoute roles={["STUDENT"]} />}>
           <Route path="/erp/student" element={<StudentDashboard />}>
+            <Route path="profile" element={<StudentProfile />} />
             <Route path="assignments" element={<Assignments />} />
             <Route path="fees" element={<FeeDetails />} />
             <Route path="library" element={<LibraryDetails />} />

@@ -29,6 +29,24 @@ const database = {
         ? [{ FACULTY_ID: user.USER_ID + 100, USER_ID: user.USER_ID, STATUS: "ACTIVE" }]
         : [];
     }
+    if (sql.includes("FROM STUDENTS") && sql.includes("WHERE USER_ID = ? AND STATUS = 'ACTIVE'")) {
+      const student = users.find((user) => user.USER_ID === Number(params[0]) && user.ROLE === "STUDENT");
+      return student ? [{
+        STUDENT_ID: student.USER_ID + 199,
+        ROLL_NUMBER: "R-001",
+        ADMISSION_NUMBER: "A-001",
+        FIRST_NAME: "Student",
+        LAST_NAME: "One",
+        EMAIL: student.USERNAME,
+        PHONE_NUMBER: "555-0101",
+        PROGRAM_ID: 11,
+        DEPARTMENT_ID: 4,
+        BATCH_YEAR: 2025,
+        CURRENT_SEMESTER: 2,
+        ADMISSION_DATE: "2025-08-01",
+        STATUS: "ACTIVE",
+      }] : [];
+    }
       if (sql.includes("FROM ASSIGNMENTS WHERE FACULTY_NAME =")) return [{ TOTAL: 0, PENDING: 0 }];
       if (sql.includes("FROM FACULTY_QUESTIONS WHERE FACULTY_ID =")) return [{ TOTAL: 0 }];
       if (sql.includes("FROM FACULTY_FORMS WHERE FACULTY_ID =")) return [{ TOTAL: 0 }];
@@ -125,9 +143,22 @@ test("public registration rejects privileged roles before touching persistence",
 
 test("student cannot read another student's records or administrator endpoints", async () => {
   const { agent } = await signedInAgent("student.one@example.edu");
+  await agent.get("/student-data/1/profile").expect(200);
+  await agent.get("/student-data/2/profile").expect(403);
   await agent.get("/student-data/2/dashboard").expect(403);
   await agent.get("/students").expect(403);
   await agent.get("/academic-data/1/courses").expect(403);
+});
+
+test("student profile returns only the selected identity, contact, and academic fields", async () => {
+  const { agent } = await signedInAgent("student.one@example.edu");
+  const response = await agent.get("/student-data/1/profile").expect(200);
+  assert.deepEqual(Object.keys(response.body).sort(), [
+    "ADMISSION_DATE", "ADMISSION_NUMBER", "BATCH_YEAR", "CURRENT_SEMESTER",
+    "DEPARTMENT_ID", "EMAIL", "FIRST_NAME", "LAST_NAME", "PHONE_NUMBER",
+    "PROGRAM_ID", "ROLL_NUMBER", "STATUS", "STUDENT_ID",
+  ].sort());
+  assert.equal(response.body.EMAIL, "student.one@example.edu");
 });
 
 test("faculty cannot access another faculty member's records", async () => {

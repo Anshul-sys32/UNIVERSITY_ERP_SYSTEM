@@ -27,6 +27,25 @@ const requireStudent = async (req, res) => {
 
 const withStudent = (query, field = "STUDENT_ID") => `${query} WHERE ${field} = ?`;
 
+router.get("/:userId/profile", async (req, res) => {
+  try {
+    const userId = Number(req.auth?.userId);
+    const rows = await pool.query(
+      `SELECT STUDENT_ID, ROLL_NUMBER, ADMISSION_NUMBER, FIRST_NAME, LAST_NAME,
+        EMAIL, PHONE_NUMBER, PROGRAM_ID, DEPARTMENT_ID, BATCH_YEAR,
+        CURRENT_SEMESTER, ADMISSION_DATE, STATUS
+       FROM STUDENTS
+       WHERE USER_ID = ? AND STATUS = 'ACTIVE'`,
+      [userId],
+    );
+    if (!rows.length) return res.status(404).json({ message: "No active student profile is linked to this account." });
+    return res.json(rows[0]);
+  } catch (error) {
+    console.error("Student profile error:", error);
+    return res.status(500).json({ message: "Unable to load your profile." });
+  }
+});
+
 router.get("/:userId/dashboard", async (req, res) => {
   try {
     const studentId = await requireStudent(req, res);

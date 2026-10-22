@@ -5,6 +5,7 @@ export const dashboardSettings = {
       background: "linear-gradient(300deg, rgba(67,10,199,0.96), rgba(255,35,15,0.95))",
       sidebarItems: [
         { path: "/erp/student", label: "Dashboard" },
+        { path: "/erp/student/profile", label: "My Profile" },
         { path: "/erp/student/assignments", label: "Assignments" },
         { path: "/erp/student/academics", label: "Academics" },
         { path: "/erp/student/fees", label: "Fee Details" },
