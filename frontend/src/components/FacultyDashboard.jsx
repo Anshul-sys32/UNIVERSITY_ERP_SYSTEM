@@ -20,6 +20,7 @@ const FacultyDashboard = () => {
     ["Assignments", "/erp/faculty/assignments"],
     ["Question bank", "/erp/faculty/question-bank"],
     ["Attendance", "/erp/faculty/attendance"],
+    ["Reward requests", "/erp/faculty/rewards"],
     ["Timetable", "/erp/faculty/timetable"],
     ["Form generator", "/erp/faculty/form-generator"],
   ];

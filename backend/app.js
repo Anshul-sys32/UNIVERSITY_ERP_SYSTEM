@@ -3,18 +3,21 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const cors = require("cors");
 const session = require("express-session");
+const { rateLimit } = require("express-rate-limit");
 const pool = require("./db");
 const MariaDbSessionStore = require("./sessionStore");
 const csrfProtection = require("./middleware/csrf");
 const roleAccess = require("./middleware/roleAccess");
+const auditLog = require("./middleware/auditLog");
 const studentRoutes = require("./routes/students");
 const studentDataRoutes = require("./routes/studentData");
 const facultyDataRoutes = require("./routes/facultyData");
 const employeeDataRoutes = require("./routes/employeeData");
 const operationsDataRoutes = require("./routes/operationsData");
 const academicDataRoutes = require("./routes/academicData");
+const examAdminRoutes = require("./routes/examAdmin");
 
-const ALL_ROLES = ["STUDENT", "FACULTY", "EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"];
+const ALL_ROLES = ["STUDENT", "FACULTY", "EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT", "MERCHANT"];
 const COOKIE_NAME = "erp.sid";
 
 const createApp = ({
@@ -23,6 +26,7 @@ const createApp = ({
   sessionSecret = process.env.SESSION_SECRET,
   frontendOrigins = process.env.FRONTEND_ORIGIN || "http://localhost:5173",
   production = process.env.NODE_ENV === "production",
+  mockPaymentsEnabled,
 } = {}) => {
   if (!sessionSecret || sessionSecret.length < 32) {
     throw new Error("SESSION_SECRET must be set to a random value of at least 32 characters.");
@@ -32,6 +36,14 @@ const createApp = ({
   const allowedOrigins = new Set(frontendOrigins.split(",").map((origin) => origin.trim()).filter(Boolean));
   const cookieOptions = { httpOnly: true, secure: production, sameSite: "lax", path: "/" };
   const authorize = (roles, options = {}) => roleAccess(roles, { ...options, database });
+  app.locals.mockPaymentsEnabled = mockPaymentsEnabled ?? (!production && process.env.MOCK_PAYMENTS_ENABLED !== "false");
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: production ? 10 : 30,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { message: "Too many authentication attempts. Try again later." },
+  });
 
   app.disable("x-powered-by");
   app.use(cors({
@@ -52,6 +64,7 @@ const createApp = ({
     cookie: { ...cookieOptions, maxAge: 30 * 60 * 1000 },
   }));
   app.use(csrfProtection);
+  app.use(auditLog(database));
 
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
   app.get("/csrf-token", (req, res) => {
@@ -64,6 +77,9 @@ const createApp = ({
 
   app.use("/students", authorize(["ADMIN"]), studentRoutes);
   app.use("/student-data", authorize(["STUDENT"], { matchPathUserId: true }), studentDataRoutes);
+  app.use("/campus-student", authorize(["STUDENT"], { matchPathUserId: true }), require("./routes/campusStudent"));
+  app.use("/wallet-data", authorize(["STUDENT"], { matchPathUserId: true }), require("./routes/walletStudent"));
+  app.use("/merchant-data", authorize(["MERCHANT"], { matchPathUserId: true }), require("./routes/walletMerchant"));
   app.use("/faculty-data", (req, res, next) => {
     const isProvisioning = req.method === "POST" && req.path === "/profiles";
     return authorize(isProvisioning ? ["ADMIN"] : ["FACULTY"], {
@@ -73,8 +89,13 @@ const createApp = ({
   app.use("/employee-data", authorize(["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"], { matchPathUserId: true }), employeeDataRoutes);
   app.use("/operations-data", authorize(["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"], { matchPathUserId: true }), operationsDataRoutes);
   app.use("/academic-data", authorize(["ADMIN"], { matchPathUserId: true }), academicDataRoutes);
+  app.use("/exam-admin", authorize(["ADMIN"], { matchPathUserId: true }), examAdminRoutes);
+  app.use("/wallet-admin", authorize(["ADMIN"], { matchPathUserId: true }), require("./routes/walletAdmin"));
+  app.use("/notifications", authorize(ALL_ROLES, { matchPathUserId: true }), require("./routes/notifications"));
+  app.use("/reports", authorize(["ADMIN"], { matchPathUserId: true }), require("./routes/reports"));
+  app.use("/campus-admin", authorize(["ADMIN"], { matchPathUserId: true }), require("./routes/campusAdmin"));
 
-  app.post("/login", async (req, res, next) => {
+  app.post("/login", authLimiter, async (req, res, next) => {
     const { username, password } = req.body || {};
     if (typeof username !== "string" || typeof password !== "string" || !username.trim() || !password) {
       return res.status(400).json({ message: "Username and password are required." });
@@ -112,7 +133,7 @@ const createApp = ({
     });
   });
 
-  app.post("/register", async (req, res, next) => {
+  app.post("/register", authLimiter, async (req, res, next) => {
     const { username, password, role } = req.body || {};
     if (role !== undefined && (typeof role !== "string" || role.toUpperCase() !== "STUDENT")) {
       return res.status(403).json({ message: "Public registration is limited to eligible student accounts." });

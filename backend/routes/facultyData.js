@@ -391,4 +391,66 @@ router.post("/:userId/forms", async (req, res) => {
   }
 });
 
+router.post("/:userId/reward-requests", async (req, res) => {
+  try {
+    const faculty = await requireFaculty(req, res);
+    if (!faculty) return;
+    const { courseId, studentId, policyId, amount, reason, evidenceReference = "" } = req.body || {};
+    if (!Number.isSafeInteger(Number(courseId)) || !Number.isSafeInteger(Number(studentId))
+      || !Number.isSafeInteger(Number(policyId)) || !Number.isFinite(Number(amount)) || Number(amount) <= 0
+      || !reason?.trim()) {
+      return res.status(400).json({ message: "Course, student, policy, positive amount, and reason are required." });
+    }
+    const assignedCourse = await pool.query(
+      "SELECT COURSE_ID FROM COURSES WHERE COURSE_ID = ? AND FACULTY_ID = ? AND IS_ACTIVE = 1",
+      [courseId, faculty.FACULTY_ID],
+    );
+    if (!assignedCourse.length) return res.status(403).json({ message: "Reward requests are limited to your assigned courses." });
+    const enrollment = await pool.query(
+      `SELECT S.STUDENT_ID, S.PROGRAM_ID, S.CURRENT_SEMESTER
+       FROM COURSE_REGISTRATIONS R JOIN STUDENTS S ON S.STUDENT_ID = R.STUDENT_ID
+       WHERE R.COURSE_ID = ? AND R.STUDENT_ID = ? AND R.STATUS = 'REGISTERED' AND S.STATUS = 'ACTIVE'`,
+      [courseId, studentId],
+    );
+    if (!enrollment.length) return res.status(403).json({ message: "Reward requests are limited to students enrolled in your course." });
+    const policies = await pool.query(
+      `SELECT POLICY_ID, PER_STUDENT_CAP FROM WALLET_REWARD_POLICIES
+       WHERE POLICY_ID = ? AND STATUS = 'ACTIVE'
+         AND (PROGRAM_ID IS NULL OR PROGRAM_ID = ?)
+         AND (SEMESTER IS NULL OR SEMESTER = ?)
+         AND (EXPIRES_AT IS NULL OR EXPIRES_AT >= CURRENT_DATE)`,
+      [policyId, enrollment[0].PROGRAM_ID, enrollment[0].CURRENT_SEMESTER],
+    );
+    if (!policies.length) return res.status(404).json({ message: "No active policy applies to this student." });
+    if (Number(amount) > Number(policies[0].PER_STUDENT_CAP)) return res.status(400).json({ message: "Requested reward exceeds the policy's per-student cap." });
+    const result = await pool.query(
+      `INSERT INTO WALLET_REWARD_REQUESTS
+        (POLICY_ID, STUDENT_ID, COURSE_ID, REQUESTED_BY, AMOUNT, REASON, EVIDENCE_REFERENCE)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [policyId, studentId, courseId, req.auth.userId, amount, reason.trim(), evidenceReference.trim() || null],
+    );
+    return res.status(201).json({ requestId: Number(result.insertId), message: "Reward request submitted for approval." });
+  } catch (error) {
+    console.error("Faculty reward request error:", error);
+    return res.status(500).json({ message: "Unable to submit reward request." });
+  }
+});
+
+router.get("/:userId/reward-policies", async (req, res) => {
+  try {
+    const faculty = await requireFaculty(req, res);
+    if (!faculty) return;
+    const rows = await pool.query(
+      `SELECT POLICY_ID, POLICY_NAME, PERIOD_CODE, PROGRAM_ID, SEMESTER, PER_STUDENT_CAP
+       FROM WALLET_REWARD_POLICIES
+       WHERE STATUS = 'ACTIVE' AND (EXPIRES_AT IS NULL OR EXPIRES_AT >= CURRENT_DATE)
+       ORDER BY POLICY_NAME`,
+    );
+    return res.json(rows);
+  } catch (error) {
+    console.error("Faculty reward policy list error:", error);
+    return res.status(500).json({ message: "Unable to load reward policies." });
+  }
+});
+
 module.exports = router;

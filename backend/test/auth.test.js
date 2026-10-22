@@ -11,10 +11,23 @@ const users = [
   { USER_ID: 4, USERNAME: "faculty.two@example.edu", ROLE: "FACULTY", IS_ACTIVE: 1 },
   { USER_ID: 5, USERNAME: "admin@example.edu", ROLE: "ADMIN", IS_ACTIVE: 1 },
 ];
+const feeRows = [
+  { source: "FEE_TRANSACTION", id: 10, studentId: 200, AMOUNT: "125.50", STATUS: "UNPAID", TRANSACTION_ID: null },
+];
+const paymentAttempts = [];
+let nextPaymentId = 1;
+const examSessions = [
+  { EXAM_SESSION_ID: 30, COURSE_ID: 20, EXAM_CODE: "CS101-MID-2026", EXAM_TYPE: "Midterm", EXAM_DATE: "2026-12-10", START_TIME: "10:00:00", END_TIME: "12:00:00", VENUE: "Hall A", MAX_SCORE: 100, REGISTRATION_DEADLINE: "2026-12-01", STATUS: "OPEN" },
+];
+const examRegistrations = [];
+const examMarks = [];
+const auditEvents = [];
+const placementApplications = [];
 
 const passwordHash = bcrypt.hashSync("correct horse battery", 4);
 const database = {
   async query(sql, params = []) {
+    if (sql.includes("INSERT INTO AUDIT_EVENTS")) { auditEvents.push({ params }); return { insertId: auditEvents.length }; }
     if (sql.includes("FROM USERS WHERE USERNAME =")) {
       return users.filter((user) => user.USERNAME === params[0] && user.IS_ACTIVE)
         .map((user) => ({ ...user, PASSWORD_HASH: passwordHash }));
@@ -47,6 +60,37 @@ const database = {
         STATUS: "ACTIVE",
       }] : [];
     }
+    if (sql.includes("INSERT INTO FEEDBACK")) return { insertId: 500 };
+    if (sql.includes("FROM PLACEMENT_DRIVES D") && sql.includes("LEFT JOIN PLACEMENT_APPLICATIONS")) {
+      return [{ DRIVE_ID: 40, COMPANY_NAME: "Synthetic Co", ROLE_TITLE: "Intern", STATUS: "OPEN", APPLICATION_DEADLINE: "2026-12-01", APPLICATION_STATUS: placementApplications.find((application) => application.studentId === Number(params[0]))?.status || null }];
+    }
+    if (sql.includes("FROM PLACEMENT_DRIVES") && sql.includes("APPLICATION_DEADLINE >= CURRENT_DATE")) return [{ DRIVE_ID: 40 }];
+    if (sql.includes("SELECT APPLICATION_ID, STATUS FROM PLACEMENT_APPLICATIONS WHERE DRIVE_ID = ? AND STUDENT_ID = ?")) {
+      return placementApplications.filter((application) => application.driveId === Number(params[0]) && application.studentId === Number(params[1])).map((application) => ({ APPLICATION_ID: application.id, STATUS: application.status }));
+    }
+    if (sql.includes("INSERT INTO PLACEMENT_APPLICATIONS")) {
+      const application = { id: 1, driveId: Number(params[0]), studentId: Number(params[1]), status: "APPLIED" };
+      placementApplications.push(application);
+      return { insertId: application.id };
+    }
+    if (sql.includes("SELECT STUDENT_ID FROM STUDENTS WHERE USER_ID = ?")) {
+      const student = users.find((user) => user.USER_ID === Number(params[0]) && user.ROLE === "STUDENT");
+      return student ? [{ STUDENT_ID: student.USER_ID + 199 }] : [];
+    }
+    if (sql.includes("FROM EXAM_SESSIONS E") && sql.includes("JOIN COURSE_REGISTRATIONS CR")) {
+      const studentId = Number(params[0]);
+      if (studentId !== 200) return [];
+      return examSessions.filter((exam) => ["OPEN", "CLOSED", "PUBLISHED"].includes(exam.STATUS)).map((exam) => ({
+        ...exam,
+        COURSE_CODE: "CS101",
+        COURSE_TITLE: "Intro to Computing",
+        REGISTRATION_STATUS: examRegistrations.find((registration) => registration.examId === exam.EXAM_SESSION_ID && registration.studentId === studentId)?.status || null,
+      }));
+    }
+    if (sql.includes("FROM EXAM_MARKS M") && sql.includes("E.STATUS = 'PUBLISHED'")) {
+      return examMarks.filter((mark) => mark.studentId === Number(params[0]) && mark.status === "PUBLISHED")
+        .map((mark) => ({ ...mark.result }));
+    }
       if (sql.includes("FROM ASSIGNMENTS WHERE FACULTY_NAME =")) return [{ TOTAL: 0, PENDING: 0 }];
       if (sql.includes("FROM FACULTY_QUESTIONS WHERE FACULTY_ID =")) return [{ TOTAL: 0 }];
       if (sql.includes("FROM FACULTY_FORMS WHERE FACULTY_ID =")) return [{ TOTAL: 0 }];
@@ -58,6 +102,68 @@ const database = {
     }
     throw new Error(`Unexpected test query: ${sql}`);
   },
+  async getConnection() {
+    let snapshot;
+    return {
+      async beginTransaction() {
+        snapshot = { feeRows: structuredClone(feeRows), paymentAttempts: structuredClone(paymentAttempts), nextPaymentId, examRegistrations: structuredClone(examRegistrations) };
+      },
+      async commit() { snapshot = null; },
+      async rollback() {
+        if (!snapshot) return;
+        feeRows.splice(0, feeRows.length, ...snapshot.feeRows);
+        paymentAttempts.splice(0, paymentAttempts.length, ...snapshot.paymentAttempts);
+        nextPaymentId = snapshot.nextPaymentId;
+        examRegistrations.splice(0, examRegistrations.length, ...snapshot.examRegistrations);
+        snapshot = null;
+      },
+      release() {},
+      async query(sql, params = []) {
+        if (sql.includes("FROM STUDENTS WHERE STUDENT_ID = ? AND USER_ID = ?")) {
+          return Number(params[0]) === Number(params[1]) + 199 ? [{ STUDENT_ID: Number(params[0]) }] : [];
+        }
+        if (sql.includes("FROM EXAM_SESSIONS E WHERE E.EXAM_SESSION_ID = ? FOR UPDATE")) {
+          return examSessions.filter((exam) => exam.EXAM_SESSION_ID === Number(params[0])).map((exam) => ({ COURSE_ID: exam.COURSE_ID, STATUS: exam.STATUS, REGISTRATION_DEADLINE: exam.REGISTRATION_DEADLINE, DEADLINE_PASSED: 0 }));
+        }
+        if (sql.includes("FROM COURSE_REGISTRATIONS WHERE COURSE_ID = ? AND STUDENT_ID = ? AND STATUS = 'REGISTERED'")) {
+          return Number(params[0]) === 20 && Number(params[1]) === 200 ? [{ REGISTRATION_ID: 9 }] : [];
+        }
+        if (sql.includes("INSERT INTO EXAM_REGISTRATIONS")) {
+          const found = examRegistrations.find((registration) => registration.examId === Number(params[0]) && registration.studentId === Number(params[1]));
+          if (found) found.status = "REGISTERED";
+          else examRegistrations.push({ examId: Number(params[0]), studentId: Number(params[1]), status: "REGISTERED" });
+          return { affectedRows: 1 };
+        }
+        if (sql.includes("FROM FEE_PAYMENT_ATTEMPTS WHERE STUDENT_ID = ? AND IDEMPOTENCY_KEY = ?")) {
+          return paymentAttempts.filter((payment) => payment.STUDENT_ID === Number(params[0]) && payment.IDEMPOTENCY_KEY === params[1]);
+        }
+        if (sql.includes("FROM FEE_TRANSACTIONS")) {
+          const row = feeRows.find((fee) => fee.id === Number(params[0]) && fee.studentId === Number(params[1]));
+          return row ? [{ FEE_ID: row.id, AMOUNT: row.AMOUNT, STATUS: row.STATUS }] : [];
+        }
+        if (sql.includes("INSERT INTO FEE_PAYMENT_ATTEMPTS")) {
+          const row = {
+            PAYMENT_ID: nextPaymentId++,
+            STUDENT_ID: Number(params[0]),
+            FEE_SOURCE: params[1],
+            FEE_RECORD_ID: Number(params[2]),
+            IDEMPOTENCY_KEY: params[3],
+            TRANSACTION_REFERENCE: params[4],
+            AMOUNT: params[5],
+            STATUS: "SUCCEEDED",
+          };
+          paymentAttempts.push(row);
+          return { insertId: row.PAYMENT_ID };
+        }
+        if (sql.includes("UPDATE FEE_TRANSACTIONS SET STATUS = 'PAID'")) {
+          const row = feeRows.find((fee) => fee.id === Number(params[1]) && fee.studentId === Number(params[2]) && ["UNPAID", "PENDING"].includes(fee.STATUS));
+          if (row) { row.STATUS = "PAID"; row.TRANSACTION_ID = params[0]; }
+          return { affectedRows: row ? 1 : 0 };
+        }
+        throw new Error(`Unexpected test connection query: ${sql}`);
+      },
+    };
+  },
 };
 
 const poolModule = require.resolve("../db");
@@ -68,6 +174,7 @@ const app = createApp({
   sessionStore: new session.MemoryStore(),
   sessionSecret: "unit-test-session-secret-at-least-32-characters",
   production: false,
+  mockPaymentsEnabled: true,
 });
 
 const csrfFor = async (agent) => {
@@ -75,8 +182,8 @@ const csrfFor = async (agent) => {
   return response.body.csrfToken;
 };
 
-const signedInAgent = async (username) => {
-  const agent = request.agent(app);
+const signedInAgent = async (username, targetApp = app) => {
+  const agent = request.agent(targetApp);
   const token = await csrfFor(agent);
   const response = await agent.post("/login")
     .set("X-CSRF-Token", token)
@@ -148,6 +255,9 @@ test("student cannot read another student's records or administrator endpoints",
   await agent.get("/student-data/2/dashboard").expect(403);
   await agent.get("/students").expect(403);
   await agent.get("/academic-data/1/courses").expect(403);
+  await agent.get("/exam-admin/1/sessions").expect(403);
+  await agent.get("/campus-admin/1/hostel/applications").expect(403);
+  await agent.get("/reports/1/overview").expect(403);
 });
 
 test("student profile returns only the selected identity, contact, and academic fields", async () => {
@@ -159,6 +269,105 @@ test("student profile returns only the selected identity, contact, and academic 
     "PROGRAM_ID", "ROLL_NUMBER", "STATUS", "STUDENT_ID",
   ].sort());
   assert.equal(response.body.EMAIL, "student.one@example.edu");
+});
+
+test("student cannot access wallet administration or merchant APIs", async () => {
+  const { agent } = await signedInAgent("student.one@example.edu");
+  await agent.get("/wallet-admin/1/policies").expect(403);
+  await agent.get("/merchant-data/1/orders").expect(403);
+});
+
+test("student can apply to an open placement drive for their own account only", async () => {
+  const { agent, csrfToken } = await signedInAgent("student.one@example.edu");
+  const drives = await agent.get("/student-data/1/placements").expect(200);
+  assert.equal(drives.body[0].DRIVE_ID, 40);
+  await agent.post("/student-data/1/placements/40/apply").set("X-CSRF-Token", csrfToken).send({}).expect(201);
+  await agent.post("/student-data/1/placements/40/apply").set("X-CSRF-Token", csrfToken).send({}).expect(409);
+  await agent.post("/student-data/2/placements/40/apply").set("X-CSRF-Token", csrfToken).send({}).expect(403);
+});
+
+test("authenticated write requests emit append-only audit events without request bodies", async () => {
+  const { agent, csrfToken } = await signedInAgent("student.one@example.edu");
+  const startCount = auditEvents.length;
+  await agent.post("/student-data/1/feedback").set("X-CSRF-Token", csrfToken).send({ subject: "Test", message: "Synthetic feedback" }).expect(201);
+  assert.ok(auditEvents.length > startCount);
+  assert.equal(auditEvents.at(-1).params.length, 6);
+  assert.equal(typeof auditEvents.at(-1).params[3], "string");
+});
+
+test("student exam list is limited to their registered course and registration is idempotent", async () => {
+  const { agent, csrfToken } = await signedInAgent("student.one@example.edu");
+  const exams = await agent.get("/student-data/1/exams").expect(200);
+  assert.equal(exams.body.length, 1);
+  assert.equal(exams.body[0].EXAM_CODE, "CS101-MID-2026");
+  await agent.post("/student-data/1/exams/30/register").set("X-CSRF-Token", csrfToken).send({}).expect(201);
+  await agent.post("/student-data/1/exams/30/register").set("X-CSRF-Token", csrfToken).send({}).expect(201);
+  assert.equal(examRegistrations.length, 1);
+  await agent.post("/student-data/2/exams/30/register").set("X-CSRF-Token", csrfToken).send({}).expect(403);
+});
+
+test("student can only read published exam marks", async () => {
+  const { agent } = await signedInAgent("student.one@example.edu");
+  examMarks.push({ studentId: 200, status: "PUBLISHED", result: { EXAM_CODE: "CS101-MID-2026", SCORE: "84.00", MAX_SCORE: "100.00" } });
+  try {
+    const results = await agent.get("/student-data/1/exam-results").expect(200);
+    assert.equal(results.body.length, 1);
+    assert.equal(results.body[0].SCORE, "84.00");
+  } finally {
+    examMarks.splice(0, examMarks.length);
+  }
+});
+
+test("mock payment uses the stored amount and same-key retries return one payment", async () => {
+  const { agent, csrfToken } = await signedInAgent("student.one@example.edu");
+  const path = "/student-data/1/fees/FEE_TRANSACTION/10/pay";
+  const idempotencyKey = "payment-attempt-0001";
+  const first = await agent.post(path)
+    .set("X-CSRF-Token", csrfToken)
+    .set("Idempotency-Key", idempotencyKey)
+    .send({ amount: 0.01 })
+    .expect(201);
+  const retry = await agent.post(path)
+    .set("X-CSRF-Token", csrfToken)
+    .set("Idempotency-Key", idempotencyKey)
+    .send({ amount: 999999 })
+    .expect(200);
+
+  assert.equal(first.body.amount, "125.50");
+  assert.equal(first.body.provider, "MOCK");
+  assert.equal(first.body.transactionReference, retry.body.transactionReference);
+  assert.equal(paymentAttempts.length, 1);
+  assert.equal(feeRows[0].STATUS, "PAID");
+  await agent.post("/student-data/1/fees/ACCOUNTING_LEDGER/10/pay")
+    .set("X-CSRF-Token", csrfToken)
+    .set("Idempotency-Key", idempotencyKey)
+    .send({})
+    .expect(409, { message: "This idempotency key was already used for another fee." });
+});
+
+test("mock payment refuses a student URL outside the authenticated session", async () => {
+  const { agent, csrfToken } = await signedInAgent("student.one@example.edu");
+  await agent.post("/student-data/2/fees/FEE_TRANSACTION/10/pay")
+    .set("X-CSRF-Token", csrfToken)
+    .set("Idempotency-Key", "payment-attempt-0002")
+    .send({})
+    .expect(403);
+});
+
+test("mock payments can be disabled", async () => {
+  const disabledApp = createApp({
+    database,
+    sessionStore: new session.MemoryStore(),
+    sessionSecret: "disabled-mock-test-session-secret-32chars",
+    production: false,
+    mockPaymentsEnabled: false,
+  });
+  const { agent, csrfToken } = await signedInAgent("student.two@example.edu", disabledApp);
+  await agent.post("/student-data/2/fees/FEE_TRANSACTION/10/pay")
+    .set("X-CSRF-Token", csrfToken)
+    .set("Idempotency-Key", "payment-attempt-0003")
+    .send({})
+    .expect(503);
 });
 
 test("faculty cannot access another faculty member's records", async () => {

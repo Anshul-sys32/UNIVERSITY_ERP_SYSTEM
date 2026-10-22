@@ -121,3 +121,15 @@ export const adminRequest = (path, options = {}) => {
   }
   return apiRequest(path, options);
 };
+
+export const walletAdminRequest = (path, options = {}) => {
+  const userId = requireUserId("Please sign in with an administrator account first.");
+  if (currentUser.role !== "ADMIN") throw new Error("Please sign in with an administrator account first.");
+  return apiRequest(`/wallet-admin/${userId}${path}`, options);
+};
+
+export const merchantRequest = (path, options = {}) => {
+  const userId = requireUserId("Please sign in with a merchant account first.");
+  if (currentUser.role !== "MERCHANT") throw new Error("Please sign in with a merchant account first.");
+  return apiRequest(`/merchant-data/${userId}${path}`, options);
+};

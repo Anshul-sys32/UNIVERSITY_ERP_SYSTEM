@@ -20,6 +20,17 @@ export const submitStudentFeedback = (payload) => {
   });
 };
 
+export const submitStudentFeePayment = (fee) => {
+  const userId = getStudentUserId();
+  if (!userId) throw new Error("Please sign in with a student account first.");
+  const idempotencyKey = `fee-${crypto.randomUUID()}`;
+  return apiRequest(`/student-data/${userId}/fees/${fee.FEE_SOURCE}/${fee.FEE_ID}/pay`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({}),
+  });
+};
+
 export const formatDate = (value) => value
   ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(value))
   : "—";

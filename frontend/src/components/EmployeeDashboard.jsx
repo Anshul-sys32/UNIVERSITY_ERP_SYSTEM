@@ -107,6 +107,28 @@ const EmployeeDashboard = () => {
           </div>
         </section>}
         {role === "ADMIN" && <section className="mt-8">
+          <h2 className="text-xl font-semibold">Reports</h2>
+          <div className="mt-4"><button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" onClick={() => navigate("/erp/admin/reports")} type="button"><h3 className="text-lg font-semibold">Aggregate overview</h3><p className="mt-2 text-sm text-white/65">View university-level enrollment, fees, and operational totals.</p></button></div>
+        </section>}
+        {role === "ADMIN" && <section className="mt-8">
+          <h2 className="text-xl font-semibold">Campus credit</h2>
+          <div className="mt-4"><button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" onClick={() => navigate("/erp/admin/wallet")} type="button"><h3 className="text-lg font-semibold">Wallet policies and rewards</h3><p className="mt-2 text-sm text-white/65">Set budgets and review faculty reward requests.</p><span className="mt-5 inline-block text-sm text-yellow-200">Open wallet administration →</span></button></div>
+        </section>}
+        {role === "ADMIN" && <section className="mt-8">
+          <h2 className="text-xl font-semibold">Hostel and research office</h2>
+          <div className="mt-4"><button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" onClick={() => navigate("/erp/admin/campus")} type="button"><h3 className="text-lg font-semibold">Campus services administration</h3><p className="mt-2 text-sm text-white/65">Review hostel requests, manage rooms, and publish research opportunities.</p></button></div>
+        </section>}
+        {role === "ADMIN" && <section className="mt-8">
+          <h2 className="text-xl font-semibold">Examination cell</h2>
+          <div className="mt-4">
+            <button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" onClick={() => navigate("/erp/admin/exams")} type="button">
+              <h3 className="text-lg font-semibold">Exam sessions and results</h3>
+              <p className="mt-2 text-sm text-white/65">Schedule exams, enter marks, and moderate results before publication.</p>
+              <span className="mt-5 inline-block text-sm text-yellow-200">Open exam management →</span>
+            </button>
+          </div>
+        </section>}
+        {role === "ADMIN" && <section className="mt-8">
           <h2 className="text-xl font-semibold">Academic setup</h2>
           <div className="mt-4 grid gap-5 md:grid-cols-2">
             <button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" onClick={() => navigate("/erp/admin/academics/courses")} type="button">

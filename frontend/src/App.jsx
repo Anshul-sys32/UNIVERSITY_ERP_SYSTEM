@@ -24,6 +24,16 @@ import LibraryManagement from "./components/LibraryManagement";
 import PlacementManagement from "./components/PlacementManagement";
 import StudentAcademics from "./components/StudentAcademics";
 import StudentProfile from "./components/StudentProfile";
+import StudentExams from "./components/StudentExams";
+import AdminExamManagement from "./components/AdminExamManagement";
+import StudentWallet from "./components/StudentWallet";
+import FacultyRewards from "./components/FacultyRewards";
+import WalletAdministration from "./components/WalletAdministration";
+import MerchantDashboard from "./components/MerchantDashboard";
+import Notifications from "./components/Notifications";
+import AdminReports from "./components/AdminReports";
+import StudentCampusServices from "./components/StudentCampusServices";
+import CampusAdministration from "./components/CampusAdministration";
 import FacultyAttendance from "./components/FacultyAttendance";
 import FacultyTimetable from "./components/FacultyTimetable";
 import AcademicCourseManagement from "./components/AcademicCourseManagement";
@@ -36,6 +46,10 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/signin" element={<UserForm />} />
 
+        <Route element={<ProtectedRoute roles={["STUDENT", "FACULTY", "EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT", "MERCHANT"]} />}>
+          <Route path="/erp/notifications" element={<Notifications />} />
+        </Route>
+
         {/* Student Dashboard + Nested Routes */}
         <Route element={<ProtectedRoute roles={["STUDENT"]} />}>
           <Route path="/erp/student" element={<StudentDashboard />}>
@@ -46,6 +60,9 @@ function App() {
             <Route path="events" element={<EventsPlacement />} />
             <Route path="question-bank" element={<QuestionBank />} />
             <Route path="results" element={<Result />} />
+            <Route path="exams" element={<StudentExams />} />
+            <Route path="wallet" element={<StudentWallet />} />
+            <Route path="campus-services" element={<StudentCampusServices />} />
             <Route path="feedback" element={<Feedback />} />
             <Route path="academics" element={<StudentAcademics />} />
           </Route>
@@ -58,6 +75,7 @@ function App() {
             <Route path="assignments" element={<FacultyAssignments />} />
             <Route path="question-bank" element={<FacultyQuestionBank />} />
             <Route path="attendance" element={<FacultyAttendance />} />
+            <Route path="rewards" element={<FacultyRewards />} />
             <Route path="timetable" element={<FacultyTimetable />} />
           </Route>
         </Route>
@@ -81,6 +99,13 @@ function App() {
           <Route path="/erp/admin/admissions" element={<ManageStudents />} />
           <Route path="/erp/admin/students" element={<ManageStudents />} />
           <Route path="/erp/admin/academics/courses" element={<AcademicCourseManagement />} />
+          <Route path="/erp/admin/exams" element={<AdminExamManagement />} />
+          <Route path="/erp/admin/wallet" element={<WalletAdministration />} />
+          <Route path="/erp/admin/reports" element={<AdminReports />} />
+          <Route path="/erp/admin/campus" element={<CampusAdministration />} />
+        </Route>
+        <Route element={<ProtectedRoute roles={["MERCHANT"]} />}>
+          <Route path="/erp/merchant" element={<MerchantDashboard />} />
         </Route>
       </Routes>
     </Router>

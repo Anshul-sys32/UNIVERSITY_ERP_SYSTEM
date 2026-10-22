@@ -7,6 +7,7 @@ const destinationByRole = {
   FACULTY: "/erp/faculty",
   EMPLOYEE: "/erp/employee",
   ADMIN: "/erp/employee",
+  MERCHANT: "/erp/merchant",
 };
 
 function UserForm() {
@@ -29,7 +30,7 @@ function UserForm() {
     try {
       const data = await login(username, password);
       const selectedRole = role.toUpperCase();
-      const employeeRoles = ["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"];
+      const employeeRoles = ["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT", "MERCHANT"];
       const roleMatches = selectedRole === "EMPLOYEE"
         ? employeeRoles.includes(data.role)
         : data.role === selectedRole;

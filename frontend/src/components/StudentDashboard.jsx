@@ -86,7 +86,7 @@ const StudentDashboard = () => {
               <h2 className="mt-1 text-2xl font-bold sm:text-3xl">{student ? `Welcome, ${student.FIRST_NAME}` : "Welcome back"}</h2>
             </div>
             <div className="flex gap-3">
-              <button className="rounded-xl bg-white/10 p-3 hover:bg-white/20" title="Notifications" type="button"><img src={BellIcon} alt="Notifications" className="h-7 w-7" /></button>
+              <button className="rounded-xl bg-white/10 p-3 hover:bg-white/20" title="Notifications" onClick={() => navigate("/erp/notifications")} type="button"><img src={BellIcon} alt="Notifications" className="h-7 w-7" /></button>
               <button className="rounded-xl bg-white/10 p-3 hover:bg-white/20" title="Profile" type="button"><img src={UserIcon} alt="Profile" className="h-7 w-7" /></button>
             </div>
           </header>

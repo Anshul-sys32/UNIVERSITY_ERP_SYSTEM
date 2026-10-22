@@ -123,6 +123,17 @@ router.post("/:userId/announcements", onlyRoles(["ADMIN", "EMPLOYEE"]), async (r
       "INSERT INTO ANNOUNCEMENTS (TITLE, MESSAGE, AUDIENCE, PUBLISHED_BY) VALUES (?, ?, ?, ?)",
       [title.trim(), message.trim(), audience, req.params.userId],
     );
+    const audienceRoles = { STUDENT: ["STUDENT"], FACULTY: ["FACULTY"], EMPLOYEE: ["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"], ALL: ["STUDENT", "FACULTY", "EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"] };
+    try {
+      await pool.query(
+        `INSERT INTO IN_APP_NOTIFICATIONS (USER_ID, TITLE, MESSAGE, NOTIFICATION_TYPE, RESOURCE_PATH)
+         SELECT USER_ID, ?, ?, 'ANNOUNCEMENT', '/erp/notifications'
+         FROM USERS WHERE IS_ACTIVE = 1 AND ROLE IN (${audienceRoles[audience].map(() => "?").join(", ")})`,
+        ["New announcement", title.trim(), ...audienceRoles[audience]],
+      );
+    } catch (notificationError) {
+      console.error("Announcement notification fan-out failed:", notificationError);
+    }
     res.status(201).json({ id: Number(result.insertId), message: "Announcement published." });
   } catch (error) {
     console.error("Create announcement error:", error);
@@ -248,11 +259,28 @@ router.patch("/:userId/placements/applications/:applicationId/status", requirePl
     if (!["APPLIED", "SHORTLISTED", "SELECTED", "REJECTED", "WITHDRAWN"].includes(status)) {
       return res.status(400).json({ message: "Invalid application status." });
     }
+    const applications = await pool.query(
+      `SELECT A.APPLICATION_ID, S.USER_ID FROM PLACEMENT_APPLICATIONS A
+       JOIN STUDENTS S ON S.STUDENT_ID = A.STUDENT_ID WHERE A.APPLICATION_ID = ?`,
+      [req.params.applicationId],
+    );
+    if (!applications.length) return res.status(404).json({ message: "Application not found." });
     const result = await pool.query(
       "UPDATE PLACEMENT_APPLICATIONS SET STATUS = ? WHERE APPLICATION_ID = ?",
       [status, req.params.applicationId],
     );
     if (!result.affectedRows) return res.status(404).json({ message: "Application not found." });
+    if (applications[0].USER_ID) {
+      try {
+        await pool.query(
+          `INSERT INTO IN_APP_NOTIFICATIONS (USER_ID, TITLE, MESSAGE, NOTIFICATION_TYPE, RESOURCE_PATH)
+           VALUES (?, 'Placement application updated', ?, 'PLACEMENT_UPDATE', '/erp/student/events')`,
+          [applications[0].USER_ID, `Your placement application status is now ${status.toLowerCase()}.`],
+        );
+      } catch (notificationError) {
+        console.error("Placement notification failed:", notificationError);
+      }
+    }
     res.json({ message: "Application status updated." });
   } catch (error) {
     console.error("Placement application status error:", error);

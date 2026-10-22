@@ -1,4 +1,5 @@
 const express = require("express");
+const crypto = require("node:crypto");
 const pool = require("../db");
 
 const router = express.Router();
@@ -156,16 +157,112 @@ router.get("/:userId/attendance", async (req, res) => {
   }
 });
 
+router.get("/:userId/exams", async (req, res) => {
+  try {
+    const studentId = await requireStudent(req, res);
+    if (!studentId) return;
+    const rows = await pool.query(
+      `SELECT E.EXAM_SESSION_ID, E.EXAM_CODE, E.EXAM_TYPE, E.EXAM_DATE,
+        E.START_TIME, E.END_TIME, E.VENUE, E.MAX_SCORE, E.REGISTRATION_DEADLINE,
+        E.STATUS AS EXAM_STATUS, C.COURSE_ID, C.COURSE_CODE, C.TITLE AS COURSE_TITLE,
+        R.STATUS AS REGISTRATION_STATUS
+       FROM EXAM_SESSIONS E
+       JOIN COURSES C ON C.COURSE_ID = E.COURSE_ID
+       JOIN COURSE_REGISTRATIONS CR ON CR.COURSE_ID = C.COURSE_ID
+         AND CR.STUDENT_ID = ? AND CR.STATUS = 'REGISTERED'
+       LEFT JOIN EXAM_REGISTRATIONS R ON R.EXAM_SESSION_ID = E.EXAM_SESSION_ID
+         AND R.STUDENT_ID = ?
+       WHERE E.STATUS IN ('OPEN', 'CLOSED', 'PUBLISHED')
+       ORDER BY E.EXAM_DATE, E.START_TIME`,
+      [studentId, studentId],
+    );
+    return res.json(rows);
+  } catch (error) {
+    console.error("Student exam listing error:", error);
+    return res.status(500).json({ message: "Unable to load exam sessions." });
+  }
+});
+
+router.post("/:userId/exams/:examSessionId/register", async (req, res) => {
+  let connection;
+  try {
+    const studentId = await requireStudent(req, res);
+    if (!studentId) return;
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const exams = await connection.query(
+      `SELECT E.COURSE_ID, E.STATUS, E.REGISTRATION_DEADLINE,
+        (E.REGISTRATION_DEADLINE < CURRENT_DATE) AS DEADLINE_PASSED
+       FROM EXAM_SESSIONS E WHERE E.EXAM_SESSION_ID = ? FOR UPDATE`,
+      [req.params.examSessionId],
+    );
+    if (!exams.length) {
+      await connection.rollback();
+      return res.status(404).json({ message: "Exam session not found." });
+    }
+    const exam = exams[0];
+    if (exam.STATUS !== "OPEN" || Number(exam.DEADLINE_PASSED) === 1) {
+      await connection.rollback();
+      return res.status(409).json({ message: "Registration for this exam is closed." });
+    }
+    const courseRegistrations = await connection.query(
+      "SELECT REGISTRATION_ID FROM COURSE_REGISTRATIONS WHERE COURSE_ID = ? AND STUDENT_ID = ? AND STATUS = 'REGISTERED'",
+      [exam.COURSE_ID, studentId],
+    );
+    if (!courseRegistrations.length) {
+      await connection.rollback();
+      return res.status(403).json({ message: "Only students registered in the course may register for this exam." });
+    }
+    await connection.query(
+      `INSERT INTO EXAM_REGISTRATIONS (EXAM_SESSION_ID, STUDENT_ID, STATUS)
+       VALUES (?, ?, 'REGISTERED')
+       ON DUPLICATE KEY UPDATE STATUS = 'REGISTERED'`,
+      [req.params.examSessionId, studentId],
+    );
+    await connection.commit();
+    return res.status(201).json({ message: "Exam registration confirmed." });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error("Student exam registration error:", error);
+    return res.status(500).json({ message: "Unable to register for this exam." });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+router.get("/:userId/exam-results", async (req, res) => {
+  try {
+    const studentId = await requireStudent(req, res);
+    if (!studentId) return;
+    const rows = await pool.query(
+      `SELECT E.EXAM_CODE, E.EXAM_TYPE, E.EXAM_DATE, C.COURSE_CODE,
+        C.TITLE AS COURSE_TITLE, M.SCORE, M.MAX_SCORE, M.UPDATED_AT AS PUBLISHED_AT
+       FROM EXAM_MARKS M
+       JOIN EXAM_SESSIONS E ON E.EXAM_SESSION_ID = M.EXAM_SESSION_ID AND E.STATUS = 'PUBLISHED'
+       JOIN COURSES C ON C.COURSE_ID = E.COURSE_ID
+       WHERE M.STUDENT_ID = ? AND M.STATUS = 'PUBLISHED'
+       ORDER BY E.EXAM_DATE DESC, E.EXAM_CODE`,
+      [studentId],
+    );
+    return res.json(rows);
+  } catch (error) {
+    console.error("Student exam results error:", error);
+    return res.status(500).json({ message: "Unable to load published exam results." });
+  }
+});
+
 router.get("/:userId/fees", async (req, res) => {
   try {
     const studentId = await requireStudent(req, res);
     if (!studentId) return;
     const rows = await pool.query(
-      `SELECT FEE_ID, DETAIL, DUE_DATE, AMOUNT, TRANSACTION_ID, STATUS, PAID_AT, NULL AS CREATED_AT
+      `SELECT FEE_ID, 'FEE_TRANSACTION' AS FEE_SOURCE, DETAIL, DUE_DATE, AMOUNT,
+        TRANSACTION_ID, STATUS, PAID_AT, NULL AS CREATED_AT
        FROM FEE_TRANSACTIONS
        WHERE STUDENT_ID = ?
        UNION ALL
-       SELECT LEDGER_ID AS FEE_ID, DETAIL, DUE_DATE, AMOUNT, TRANSACTION_ID, STATUS, PAID_AT, CREATED_AT
+       SELECT LEDGER_ID AS FEE_ID, 'ACCOUNTING_LEDGER' AS FEE_SOURCE, DETAIL, DUE_DATE,
+        AMOUNT, TRANSACTION_ID, STATUS, PAID_AT, CREATED_AT
        FROM ACCOUNTING_LEDGER
        WHERE STUDENT_ID = ?
        ORDER BY DUE_DATE DESC, CREATED_AT DESC, FEE_ID DESC`,
@@ -175,6 +272,103 @@ router.get("/:userId/fees", async (req, res) => {
   } catch (error) {
     console.error("Student fees error:", error);
     res.status(500).json({ message: "Unable to load fee transactions." });
+  }
+});
+
+router.post("/:userId/fees/:feeSource/:feeId/pay", async (req, res) => {
+  if (!req.app.locals.mockPaymentsEnabled) {
+    return res.status(503).json({ message: "Online payments are not configured." });
+  }
+
+  const source = req.params.feeSource;
+  const sourceConfig = {
+    FEE_TRANSACTION: { table: "FEE_TRANSACTIONS", idColumn: "FEE_ID" },
+    ACCOUNTING_LEDGER: { table: "ACCOUNTING_LEDGER", idColumn: "LEDGER_ID" },
+  }[source];
+  const feeId = Number(req.params.feeId);
+  const idempotencyKey = req.get("Idempotency-Key");
+  if (!sourceConfig || !Number.isSafeInteger(feeId) || feeId < 1) {
+    return res.status(400).json({ message: "A valid fee record is required." });
+  }
+  if (typeof idempotencyKey !== "string" || !/^[a-zA-Z0-9_-]{16,128}$/.test(idempotencyKey)) {
+    return res.status(400).json({ message: "A valid Idempotency-Key is required." });
+  }
+
+  let connection;
+  try {
+    const studentId = await requireStudent(req, res);
+    if (!studentId) return;
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    await connection.query(
+      "SELECT STUDENT_ID FROM STUDENTS WHERE STUDENT_ID = ? AND USER_ID = ? AND STATUS = 'ACTIVE' FOR UPDATE",
+      [studentId, req.auth.userId],
+    );
+
+    const previous = await connection.query(
+      `SELECT PAYMENT_ID, FEE_SOURCE, FEE_RECORD_ID, TRANSACTION_REFERENCE, AMOUNT, STATUS
+       FROM FEE_PAYMENT_ATTEMPTS WHERE STUDENT_ID = ? AND IDEMPOTENCY_KEY = ?`,
+      [studentId, idempotencyKey],
+    );
+    if (previous.length) {
+      const payment = previous[0];
+      if (payment.FEE_SOURCE !== source || Number(payment.FEE_RECORD_ID) !== feeId) {
+        await connection.rollback();
+        return res.status(409).json({ message: "This idempotency key was already used for another fee." });
+      }
+      await connection.commit();
+      return res.json({ paymentId: Number(payment.PAYMENT_ID), transactionReference: payment.TRANSACTION_REFERENCE, amount: payment.AMOUNT, status: payment.STATUS, provider: "MOCK" });
+    }
+
+    const feeRows = await connection.query(
+      `SELECT ${sourceConfig.idColumn} AS FEE_ID, AMOUNT, STATUS
+       FROM ${sourceConfig.table}
+       WHERE ${sourceConfig.idColumn} = ? AND STUDENT_ID = ? FOR UPDATE`,
+      [feeId, studentId],
+    );
+    if (!feeRows.length) {
+      await connection.rollback();
+      return res.status(404).json({ message: "Fee record not found." });
+    }
+    const fee = feeRows[0];
+    if (fee.STATUS === "PAID") {
+      await connection.rollback();
+      return res.status(409).json({ message: "This fee has already been paid." });
+    }
+    if (!["UNPAID", "PENDING"].includes(fee.STATUS) || Number(fee.AMOUNT) <= 0) {
+      await connection.rollback();
+      return res.status(409).json({ message: "This fee is not currently payable." });
+    }
+
+    const transactionReference = `MOCK-${crypto.randomUUID()}`;
+    const inserted = await connection.query(
+      `INSERT INTO FEE_PAYMENT_ATTEMPTS
+        (STUDENT_ID, FEE_SOURCE, FEE_RECORD_ID, IDEMPOTENCY_KEY, TRANSACTION_REFERENCE, AMOUNT, STATUS)
+       VALUES (?, ?, ?, ?, ?, ?, 'SUCCEEDED')`,
+      [studentId, source, feeId, idempotencyKey, transactionReference, fee.AMOUNT],
+    );
+    await connection.query(
+      `UPDATE ${sourceConfig.table} SET STATUS = 'PAID', TRANSACTION_ID = ?, PAID_AT = CURRENT_TIMESTAMP
+       WHERE ${sourceConfig.idColumn} = ? AND STUDENT_ID = ? AND STATUS IN ('UNPAID', 'PENDING')`,
+      [transactionReference, feeId, studentId],
+    );
+    await connection.commit();
+    return res.status(201).json({
+      paymentId: Number(inserted.insertId),
+      transactionReference,
+      amount: fee.AMOUNT,
+      status: "SUCCEEDED",
+      provider: "MOCK",
+      message: "Development mock payment completed. No real money was charged.",
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ message: "A payment for this fee was already processed." });
+    console.error("Student mock payment error:", error);
+    return res.status(500).json({ message: "Unable to process the payment." });
+  } finally {
+    if (connection) connection.release();
   }
 });
 
@@ -210,6 +404,98 @@ router.get("/:userId/events", async (req, res) => {
   } catch (error) {
     console.error("Campus events error:", error);
     res.status(500).json({ message: "Unable to load campus events." });
+  }
+});
+
+router.get("/:userId/placements", async (req, res) => {
+  try {
+    const studentId = await requireStudent(req, res);
+    if (!studentId) return;
+    const rows = await pool.query(
+      `SELECT D.DRIVE_ID, D.COMPANY_NAME, D.ROLE_TITLE, D.ELIGIBILITY,
+        D.DRIVE_DATE, D.APPLICATION_DEADLINE, D.LOCATION, D.PACKAGE, D.DESCRIPTION,
+        A.APPLICATION_ID, A.STATUS AS APPLICATION_STATUS
+       FROM PLACEMENT_DRIVES D
+       LEFT JOIN PLACEMENT_APPLICATIONS A ON A.DRIVE_ID = D.DRIVE_ID AND A.STUDENT_ID = ?
+       WHERE D.STATUS = 'OPEN' AND D.APPLICATION_DEADLINE >= CURRENT_DATE
+       ORDER BY D.APPLICATION_DEADLINE, D.COMPANY_NAME`,
+      [studentId],
+    );
+    return res.json(rows);
+  } catch (error) {
+    console.error("Student placement drive list error:", error);
+    return res.status(500).json({ message: "Unable to load placement drives." });
+  }
+});
+
+router.post("/:userId/placements/:driveId/apply", async (req, res) => {
+  try {
+    const studentId = await requireStudent(req, res);
+    if (!studentId) return;
+    const drives = await pool.query(
+      `SELECT DRIVE_ID FROM PLACEMENT_DRIVES
+       WHERE DRIVE_ID = ? AND STATUS = 'OPEN' AND APPLICATION_DEADLINE >= CURRENT_DATE`,
+      [req.params.driveId],
+    );
+    if (!drives.length) return res.status(409).json({ message: "This placement drive is closed or past its deadline." });
+    const existing = await pool.query(
+      "SELECT APPLICATION_ID, STATUS FROM PLACEMENT_APPLICATIONS WHERE DRIVE_ID = ? AND STUDENT_ID = ?",
+      [req.params.driveId, studentId],
+    );
+    if (existing.length && existing[0].STATUS !== "WITHDRAWN") {
+      return res.status(409).json({ message: "You already have an application for this drive." });
+    }
+    if (existing.length) {
+      await pool.query(
+        "UPDATE PLACEMENT_APPLICATIONS SET STATUS = 'APPLIED', APPLIED_AT = CURRENT_TIMESTAMP WHERE APPLICATION_ID = ? AND STUDENT_ID = ?",
+        [existing[0].APPLICATION_ID, studentId],
+      );
+      return res.json({ applicationId: Number(existing[0].APPLICATION_ID), message: "Application resubmitted." });
+    }
+    const result = await pool.query(
+      "INSERT INTO PLACEMENT_APPLICATIONS (DRIVE_ID, STUDENT_ID, STATUS) VALUES (?, ?, 'APPLIED')",
+      [req.params.driveId, studentId],
+    );
+    return res.status(201).json({ applicationId: Number(result.insertId), message: "Application submitted." });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ message: "You already have an application for this drive." });
+    console.error("Student placement application error:", error);
+    return res.status(500).json({ message: "Unable to submit this application." });
+  }
+});
+
+router.post("/:userId/placements/applications/:applicationId/withdraw", async (req, res) => {
+  let connection;
+  try {
+    const studentId = await requireStudent(req, res);
+    if (!studentId) return;
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const applications = await connection.query(
+      `SELECT A.APPLICATION_ID, A.STATUS, D.STATUS AS DRIVE_STATUS,
+        (D.APPLICATION_DEADLINE < CURRENT_DATE) AS DEADLINE_PASSED
+       FROM PLACEMENT_APPLICATIONS A JOIN PLACEMENT_DRIVES D ON D.DRIVE_ID = A.DRIVE_ID
+       WHERE A.APPLICATION_ID = ? AND A.STUDENT_ID = ? FOR UPDATE`,
+      [req.params.applicationId, studentId],
+    );
+    if (!applications.length) {
+      await connection.rollback();
+      return res.status(404).json({ message: "Placement application not found." });
+    }
+    const application = applications[0];
+    if (application.STATUS !== "APPLIED" || application.DRIVE_STATUS !== "OPEN" || Number(application.DEADLINE_PASSED)) {
+      await connection.rollback();
+      return res.status(409).json({ message: "This application can no longer be withdrawn." });
+    }
+    await connection.query("UPDATE PLACEMENT_APPLICATIONS SET STATUS = 'WITHDRAWN' WHERE APPLICATION_ID = ? AND STUDENT_ID = ?", [application.APPLICATION_ID, studentId]);
+    await connection.commit();
+    return res.json({ message: "Application withdrawn." });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error("Placement application withdraw error:", error);
+    return res.status(500).json({ message: "Unable to withdraw this application." });
+  } finally {
+    if (connection) connection.release();
   }
 });
 
