@@ -44,23 +44,23 @@ const StudentDashboard = () => {
   const signOut = async () => { await logout(); navigate("/"); };
   const sidebarGroups = [
     { label: "Overview", items: [
-      { path: "/erp/student", label: "Dashboard", icon: "home", end: true },
-      { path: "/erp/student/profile", label: "My Profile", icon: "profile" },
+      { path: "/erp/student", label: "Dashboard", icon: "home", end: true, module: "student_profile" },
+      { path: "/erp/student/profile", label: "My Profile", icon: "profile", module: "student_profile" },
     ] },
     { label: "Learning", items: [
-      { path: "/erp/student/academics", label: "Academics", icon: "academics" },
-      { path: "/erp/student/assignments", label: "Assignments", icon: "assignments" },
-      { path: "/erp/student/exams", label: "Examinations", icon: "exams" },
-      { path: "/erp/student/question-bank", label: "Question Bank", icon: "questions" },
-      { path: "/erp/student/results", label: "Results", icon: "exams" },
+      { path: "/erp/student/academics", label: "Academics", icon: "academics", module: "student_academics" },
+      { path: "/erp/student/assignments", label: "Assignments", icon: "assignments", module: "student_academics" },
+      { path: "/erp/student/exams", label: "Examinations", icon: "exams", module: "student_exams" },
+      { path: "/erp/student/question-bank", label: "Question Bank", icon: "questions", module: "student_exams" },
+      { path: "/erp/student/results", label: "Results", icon: "exams", module: "student_exams" },
     ] },
     { label: "Campus", items: [
-      { path: "/erp/student/fees", label: "Fees", icon: "finance" },
-      { path: "/erp/student/wallet", label: "Campus Wallet", icon: "wallet" },
-      { path: "/erp/student/library", label: "Library", icon: "library" },
-      { path: "/erp/student/events", label: "Events & Placements", icon: "placements" },
-      { path: "/erp/student/campus-services", label: "Hostel & Research", icon: "campus" },
-      { path: "/erp/student/feedback", label: "Help & Feedback", icon: "services" },
+      { path: "/erp/student/fees", label: "Fees", icon: "finance", module: "student_finance" },
+      { path: "/erp/student/wallet", label: "Campus Wallet", icon: "wallet", module: "wallet_data" },
+      { path: "/erp/student/library", label: "Library", icon: "library", module: "student_library" },
+      { path: "/erp/student/events", label: "Events & Placements", icon: "placements", module: "student_placements" },
+      { path: "/erp/student/campus-services", label: "Hostel & Research", icon: "campus", module: "campus_student" },
+      { path: "/erp/student/feedback", label: "Help & Feedback", icon: "services", module: "student_support" },
     ] },
   ];
 

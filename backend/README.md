@@ -22,6 +22,7 @@
    mysql -u root -p university_erp < backend/migrations/004_create_wallet_workflows.sql
    mysql -u root -p university_erp < backend/migrations/005_create_audit_notifications.sql
    mysql -u root -p university_erp < backend/migrations/006_create_hostel_research_workflows.sql
+   mysql -u root -p university_erp < backend/migrations/007_create_role_module_policies.sql
    ```
 
 4. Copy `backend/.env.example` to `backend/.env`. Set `SESSION_SECRET` to a unique random value from `openssl rand -base64 48` and configure local database credentials. Do not commit `.env`.
@@ -59,6 +60,9 @@ The frontend must send cookies with `credentials: "include"` and include the CSR
 - `/wallet-data/:userId`, `/wallet-admin/:userId`, `/merchant-data/:userId`: student wallet, administrator policy/reward controls, and merchant-owned catalog/order/refund operations.
 - `/notifications/:userId`: read and mark the signed-in user's in-app notifications.
 - `/reports/:userId/overview`: admin-only aggregate reporting without student-level rows.
+- `/access-admin/policies`: administrator-only role/module read, write, sidebar visibility, and supported row-scope policy management. `/me/navigation` returns the signed-in role's sidebar-visible module grants; administrators may preview another role with `?role=ROLE`.
+
+Role grants are evaluated on the server for every mounted module request. The access console only offers row scopes supported by that module. Existing ownership checks (student self records, assigned faculty courses) remain in force and cannot be widened by changing sidebar visibility.
 
 The backend uses Express 5 and MariaDB/MySQL. Use a least-privilege database account outside local development.
 

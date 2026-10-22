@@ -23,11 +23,43 @@ const examRegistrations = [];
 const examMarks = [];
 const auditEvents = [];
 const placementApplications = [];
+const policyOverrides = new Map();
+const policyChecks = [];
+const grants = {
+  STUDENT: ["student_profile", "student_academics", "student_finance", "student_library", "student_placements", "student_exams", "student_support", "campus_student", "wallet_data", "notifications", "announcements"],
+  FACULTY: ["faculty_data", "faculty_academics", "faculty_questions", "faculty_rewards", "notifications", "announcements"],
+  EMPLOYEE: ["employee_data", "dashboard_configuration", "announcements", "employee_feedback", "operations_placements", "notifications"],
+  ADMIN: ["admin_home", "students", "student_data", "student_profile", "student_academics", "student_finance", "student_library", "student_placements", "student_exams", "student_support", "employee_feedback", "announcements", "campus_student", "wallet_data", "faculty_data", "faculty_academics", "faculty_questions", "faculty_rewards", "employee_data", "dashboard_configuration", "user_admin", "operations_accounting", "operations_library", "operations_placements", "academic_data", "exam_admin", "wallet_admin", "campus_admin", "reports", "notifications", "access_admin"],
+  LIBRARIAN: ["employee_data", "dashboard_configuration", "operations_library", "notifications"],
+  ACCOUNTANT: ["employee_data", "dashboard_configuration", "operations_accounting", "notifications"],
+  MERCHANT: ["merchant_data", "notifications"],
+};
 
 const passwordHash = bcrypt.hashSync("correct horse battery", 4);
 const database = {
   async query(sql, params = []) {
     if (sql.includes("INSERT INTO AUDIT_EVENTS")) { auditEvents.push({ params }); return { insertId: auditEvents.length }; }
+    if (sql.includes("FROM ROLE_MODULE_POLICIES WHERE ROLE_NAME = ? AND MODULE_KEY = ?")) {
+      policyChecks.push([params[0], params[1]]);
+      const key = `${params[0]}:${params[1]}`;
+      if (policyOverrides.has(key)) return [policyOverrides.get(key)];
+      const allowed = (grants[params[0]] || []).includes(params[1]);
+      return allowed ? [{ CAN_READ: 1, CAN_WRITE: 1, ROW_SCOPE: params[0] === "FACULTY" ? "assigned_course" : "university", SIDEBAR_VISIBLE: 1 }] : [];
+    }
+    if (sql.includes("FROM ROLE_MODULE_POLICIES") && sql.includes("SIDEBAR_VISIBLE = 1")) {
+      const role = params[0];
+      const keys = new Set(grants[role] || []);
+      for (const [key, policy] of policyOverrides.entries()) {
+        const [policyRole, moduleKey] = key.split(":");
+        if (policyRole === role && Number(policy.CAN_READ) && Number(policy.SIDEBAR_VISIBLE)) keys.add(moduleKey);
+        if (policyRole === role && (!Number(policy.CAN_READ) || !Number(policy.SIDEBAR_VISIBLE))) keys.delete(moduleKey);
+      }
+      return [...keys].map((MODULE_KEY) => ({ MODULE_KEY, ROW_SCOPE: "self" }));
+    }
+    if (sql.includes("INSERT INTO ROLE_MODULE_POLICIES")) {
+      policyOverrides.set(`${params[0]}:${params[1]}`, { CAN_READ: params[2], CAN_WRITE: params[3], ROW_SCOPE: params[4], SIDEBAR_VISIBLE: params[5] });
+      return { affectedRows: 1 };
+    }
     if (sql.includes("FROM USERS WHERE USERNAME =")) {
       return users.filter((user) => user.USERNAME === params[0] && user.IS_ACTIVE)
         .map((user) => ({ ...user, PASSWORD_HASH: passwordHash }));
@@ -275,6 +307,41 @@ test("student cannot access wallet administration or merchant APIs", async () =>
   const { agent } = await signedInAgent("student.one@example.edu");
   await agent.get("/wallet-admin/1/policies").expect(403);
   await agent.get("/merchant-data/1/orders").expect(403);
+  await agent.get("/access-admin/policies").expect(403);
+});
+
+test("role navigation is derived from sidebar-enabled read policies", async () => {
+  const { agent } = await signedInAgent("student.one@example.edu");
+  const response = await agent.get("/me/navigation").expect(200);
+  assert.ok(response.body.modules.includes("student_finance"));
+  assert.ok(!response.body.modules.includes("wallet_admin"));
+});
+
+test("administrator can change another role's backend module and sidebar grant", async () => {
+  const { agent } = await signedInAgent("admin@example.edu");
+  const csrfToken = await csrfFor(agent);
+  await agent.put("/access-admin/policies/STUDENT/student_finance")
+    .set("X-CSRF-Token", csrfToken)
+    .send({ canRead: false, canWrite: false, rowScope: "self", sidebarVisible: false })
+    .expect(200);
+  assert.ok(policyOverrides.has("STUDENT:student_finance"), JSON.stringify([...policyOverrides.keys()]));
+  try {
+    const student = await signedInAgent("student.one@example.edu");
+    await student.agent.get("/student-data/1/fees").expect(403);
+    const navigation = await agent.get("/me/navigation?role=STUDENT").expect(200);
+    assert.ok(!navigation.body.modules.includes("student_finance"), JSON.stringify(navigation.body.modules));
+  } finally {
+    policyOverrides.delete("STUDENT:student_finance");
+  }
+});
+
+test("administrator role control cannot be removed by the policy console", async () => {
+  const { agent } = await signedInAgent("admin@example.edu");
+  const csrfToken = await csrfFor(agent);
+  await agent.put("/access-admin/policies/ADMIN/reports")
+    .set("X-CSRF-Token", csrfToken)
+    .send({ canRead: false, canWrite: false, rowScope: "university", sidebarVisible: false })
+    .expect(403);
 });
 
 test("student can apply to an open placement drive for their own account only", async () => {
@@ -325,8 +392,8 @@ test("mock payment uses the stored amount and same-key retries return one paymen
   const first = await agent.post(path)
     .set("X-CSRF-Token", csrfToken)
     .set("Idempotency-Key", idempotencyKey)
-    .send({ amount: 0.01 })
-    .expect(201);
+    .send({ amount: 0.01 });
+  assert.equal(first.status, 201, `${first.text}; checked=${JSON.stringify(policyChecks.slice(-5))}`);
   const retry = await agent.post(path)
     .set("X-CSRF-Token", csrfToken)
     .set("Idempotency-Key", idempotencyKey)
@@ -347,11 +414,11 @@ test("mock payment uses the stored amount and same-key retries return one paymen
 
 test("mock payment refuses a student URL outside the authenticated session", async () => {
   const { agent, csrfToken } = await signedInAgent("student.one@example.edu");
-  await agent.post("/student-data/2/fees/FEE_TRANSACTION/10/pay")
+  const response = await agent.post("/student-data/2/fees/FEE_TRANSACTION/10/pay")
     .set("X-CSRF-Token", csrfToken)
     .set("Idempotency-Key", "payment-attempt-0002")
-    .send({})
-    .expect(403);
+    .send({});
+  assert.equal(response.status, 403, response.text);
 });
 
 test("mock payments can be disabled", async () => {

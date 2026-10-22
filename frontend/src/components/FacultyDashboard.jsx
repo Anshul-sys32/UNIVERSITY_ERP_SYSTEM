@@ -21,15 +21,15 @@ const FacultyDashboard = () => {
   const isHome = location.pathname === "/erp/faculty";
   const faculty = dashboard?.faculty;
   const sidebarGroups = [
-    { label: "Workspace", items: [{ label: "Dashboard", path: "/erp/faculty", icon: "home", end: true }] },
+    { label: "Workspace", items: [{ label: "Dashboard", path: "/erp/faculty", icon: "home", end: true, module: "faculty_academics" }] },
     { label: "Teaching", items: [
-      { label: "Timetable", path: "/erp/faculty/timetable", icon: "timetable" },
-      { label: "Attendance", path: "/erp/faculty/attendance", icon: "attendance" },
-      { label: "Assignments", path: "/erp/faculty/assignments", icon: "assignments" },
-      { label: "Question bank", path: "/erp/faculty/question-bank", icon: "questions" },
-      { label: "Form generator", path: "/erp/faculty/form-generator", icon: "academics" },
+      { label: "Timetable", path: "/erp/faculty/timetable", icon: "timetable", module: "faculty_academics" },
+      { label: "Attendance", path: "/erp/faculty/attendance", icon: "attendance", module: "faculty_academics" },
+      { label: "Assignments", path: "/erp/faculty/assignments", icon: "assignments", module: "faculty_academics" },
+      { label: "Question bank", path: "/erp/faculty/question-bank", icon: "questions", module: "faculty_questions" },
+      { label: "Form generator", path: "/erp/faculty/form-generator", icon: "academics", module: "faculty_academics" },
     ] },
-    { label: "Student support", items: [{ label: "Reward requests", path: "/erp/faculty/rewards", icon: "rewards" }] },
+    { label: "Student support", items: [{ label: "Reward requests", path: "/erp/faculty/rewards", icon: "rewards", module: "faculty_rewards" }] },
   ];
 
   return (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useTheme } from "./themeContext";
+import { apiRequest } from "../api/roleApi";
 
 const iconMarks = {
   home: "H",
@@ -59,7 +60,16 @@ const AnimatedSidebar = ({
 }) => {
   const location = useLocation();
   const { theme, setTheme } = useTheme();
+  const [visibleModules, setVisibleModules] = useState(null);
   const [openGroups, setOpenGroups] = useState(() => Object.fromEntries(groups.map((group) => [group.label, true])));
+
+  useEffect(() => {
+    let active = true;
+    apiRequest("/me/navigation")
+      .then((navigation) => { if (active) setVisibleModules(navigation.modules); })
+      .catch(() => { if (active) setVisibleModules(null); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     onCloseMobile();
@@ -95,7 +105,8 @@ const AnimatedSidebar = ({
         </div>
 
         <nav aria-label={`${title} navigation`} className="sidebar-navigation">
-          {groups.map((group) => (
+          {groups.map((group) => ({ ...group, items: group.items.filter((item) => !item.module || !visibleModules || visibleModules.includes(item.module)) }))
+            .filter((group) => group.items.length > 0).map((group) => (
             <section className="sidebar-group" key={group.label}>
               {!collapsed && group.label && (
                 <button

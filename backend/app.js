@@ -36,6 +36,40 @@ const createApp = ({
   const allowedOrigins = new Set(frontendOrigins.split(",").map((origin) => origin.trim()).filter(Boolean));
   const cookieOptions = { httpOnly: true, secure: production, sameSite: "lax", path: "/" };
   const authorize = (roles, options = {}) => roleAccess(roles, { ...options, database });
+  const pathSections = (req) => String(req.path).split("/").filter(Boolean);
+  const moduleForStudent = (req) => {
+    const sections = pathSections(req);
+    const sectionMap = {
+      profile: "student_profile", dashboard: "student_profile",
+      assignments: "student_academics", courses: "student_academics", timetable: "student_academics", attendance: "student_academics",
+      fees: "student_finance", library: "student_library",
+      events: "student_placements", placements: "student_placements",
+      "question-papers": "student_exams", results: "student_exams", exams: "student_exams", "exam-results": "student_exams",
+      feedback: "student_support", announcements: "notifications",
+    };
+    const moduleKey = sections.map((section) => sectionMap[section]).find(Boolean);
+    return moduleKey || "student_data";
+  };
+  const moduleForFaculty = (req) => {
+    if (req.method === "POST" && pathSections(req).includes("profiles")) return "faculty_data";
+    const sections = pathSections(req);
+    if (sections.includes("questions")) return "faculty_questions";
+    if (sections.some((section) => ["reward-requests", "reward-policies"].includes(section))) return "faculty_rewards";
+    return "faculty_academics";
+  };
+  const moduleForEmployee = (req) => {
+    const sections = pathSections(req);
+    if (sections.includes("users")) return "user_admin";
+    if (sections.includes("config")) return "dashboard_configuration";
+    if (sections.includes("placements")) return "operations_placements";
+    if (sections.includes("feedback")) return "employee_feedback";
+    if (sections.includes("announcements")) return "announcements";
+    return "employee_data";
+  };
+  const moduleForOperations = (req) => {
+    const sectionMap = { accounting: "operations_accounting", library: "operations_library", placements: "operations_placements" };
+    return pathSections(req).map((section) => sectionMap[section]).find(Boolean) || null;
+  };
   app.locals.mockPaymentsEnabled = mockPaymentsEnabled ?? (!production && process.env.MOCK_PAYMENTS_ENABLED !== "false");
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -74,26 +108,39 @@ const createApp = ({
   app.get("/me", authorize(ALL_ROLES), (req, res) => {
     res.json({ user_id: req.auth.userId, username: req.auth.username, role: req.auth.role });
   });
+  app.get("/me/navigation", authorize(ALL_ROLES), async (req, res, next) => {
+    try {
+      const requestedRole = req.query.role ? String(req.query.role).toUpperCase() : req.auth.role;
+      if (requestedRole !== req.auth.role && req.auth.role !== "ADMIN") {
+        return res.status(403).json({ message: "Only administrators can preview another role's navigation." });
+      }
+      const policies = await database.query(
+        `SELECT MODULE_KEY, ROW_SCOPE FROM ROLE_MODULE_POLICIES
+         WHERE ROLE_NAME = ? AND CAN_READ = 1 AND SIDEBAR_VISIBLE = 1 ORDER BY MODULE_KEY`,
+        [requestedRole],
+      );
+      res.json({ modules: policies.map((policy) => policy.MODULE_KEY), scopes: Object.fromEntries(policies.map((policy) => [policy.MODULE_KEY, policy.ROW_SCOPE])) });
+    } catch (error) { next(error); }
+  });
 
-  app.use("/students", authorize(["ADMIN"]), studentRoutes);
-  app.use("/student-data", authorize(["STUDENT"], { matchPathUserId: true }), studentDataRoutes);
-  app.use("/campus-student", authorize(["STUDENT"], { matchPathUserId: true }), require("./routes/campusStudent"));
-  app.use("/wallet-data", authorize(["STUDENT"], { matchPathUserId: true }), require("./routes/walletStudent"));
-  app.use("/merchant-data", authorize(["MERCHANT"], { matchPathUserId: true }), require("./routes/walletMerchant"));
+  app.use("/students", authorize(ALL_ROLES, { module: "students" }), studentRoutes);
+  app.use("/student-data", authorize(ALL_ROLES, { matchPathUserId: true, module: moduleForStudent }), studentDataRoutes);
+  app.use("/campus-student", authorize(ALL_ROLES, { matchPathUserId: true, module: "campus_student" }), require("./routes/campusStudent"));
+  app.use("/wallet-data", authorize(ALL_ROLES, { matchPathUserId: true, module: "wallet_data" }), require("./routes/walletStudent"));
+  app.use("/merchant-data", authorize(ALL_ROLES, { matchPathUserId: true, module: "merchant_data" }), require("./routes/walletMerchant"));
   app.use("/faculty-data", (req, res, next) => {
     const isProvisioning = req.method === "POST" && req.path === "/profiles";
-    return authorize(isProvisioning ? ["ADMIN"] : ["FACULTY"], {
-      matchPathUserId: !isProvisioning,
-    })(req, res, next);
+    return authorize(isProvisioning ? ["ADMIN"] : ALL_ROLES, { matchPathUserId: !isProvisioning, module: moduleForFaculty })(req, res, next);
   }, facultyDataRoutes);
-  app.use("/employee-data", authorize(["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"], { matchPathUserId: true }), employeeDataRoutes);
-  app.use("/operations-data", authorize(["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"], { matchPathUserId: true }), operationsDataRoutes);
-  app.use("/academic-data", authorize(["ADMIN"], { matchPathUserId: true }), academicDataRoutes);
-  app.use("/exam-admin", authorize(["ADMIN"], { matchPathUserId: true }), examAdminRoutes);
-  app.use("/wallet-admin", authorize(["ADMIN"], { matchPathUserId: true }), require("./routes/walletAdmin"));
-  app.use("/notifications", authorize(ALL_ROLES, { matchPathUserId: true }), require("./routes/notifications"));
-  app.use("/reports", authorize(["ADMIN"], { matchPathUserId: true }), require("./routes/reports"));
-  app.use("/campus-admin", authorize(["ADMIN"], { matchPathUserId: true }), require("./routes/campusAdmin"));
+  app.use("/employee-data", authorize(ALL_ROLES, { matchPathUserId: true, module: moduleForEmployee }), employeeDataRoutes);
+  app.use("/operations-data", authorize(ALL_ROLES, { matchPathUserId: true, module: moduleForOperations }), operationsDataRoutes);
+  app.use("/academic-data", authorize(ALL_ROLES, { matchPathUserId: true, module: "academic_data" }), academicDataRoutes);
+  app.use("/exam-admin", authorize(ALL_ROLES, { matchPathUserId: true, module: "exam_admin" }), examAdminRoutes);
+  app.use("/wallet-admin", authorize(ALL_ROLES, { matchPathUserId: true, module: "wallet_admin" }), require("./routes/walletAdmin"));
+  app.use("/notifications", authorize(ALL_ROLES, { matchPathUserId: true, module: "notifications" }), require("./routes/notifications"));
+  app.use("/reports", authorize(ALL_ROLES, { matchPathUserId: true, module: "reports" }), require("./routes/reports"));
+  app.use("/campus-admin", authorize(ALL_ROLES, { matchPathUserId: true, module: "campus_admin" }), require("./routes/campusAdmin"));
+  app.use("/access-admin", authorize(["ADMIN"]), require("./routes/accessAdmin"));
 
   app.post("/login", authLimiter, async (req, res, next) => {
     const { username, password } = req.body || {};

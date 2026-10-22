@@ -3,14 +3,7 @@ const pool = require("../db");
 
 const router = express.Router();
 
-const onlyRoles = (roles) => (req, res, next) => {
-  if (!roles.includes(req.erpRole)) {
-    return res.status(403).json({ message: "This role does not have access to this operation." });
-  }
-  next();
-};
-
-router.get("/:userId/accounting/summary", onlyRoles(["ADMIN", "ACCOUNTANT"]), async (_req, res) => {
+router.get("/:userId/accounting/summary", async (_req, res) => {
   try {
     const [totals, outstanding, recent] = await Promise.all([
       pool.query("SELECT COUNT(*) AS TOTAL, COALESCE(SUM(AMOUNT), 0) AS AMOUNT FROM ACCOUNTING_LEDGER"),
@@ -33,7 +26,7 @@ router.get("/:userId/accounting/summary", onlyRoles(["ADMIN", "ACCOUNTANT"]), as
   }
 });
 
-router.post("/:userId/accounting", onlyRoles(["ADMIN", "ACCOUNTANT"]), async (req, res) => {
+router.post("/:userId/accounting", async (req, res) => {
   try {
     const { studentId, detail, amount, dueDate, status = "UNPAID", transactionId = "" } = req.body;
     if (!Number.isInteger(Number(studentId)) || !detail?.trim() || !Number.isFinite(Number(amount))) {
@@ -55,7 +48,7 @@ router.post("/:userId/accounting", onlyRoles(["ADMIN", "ACCOUNTANT"]), async (re
   }
 });
 
-router.patch("/:userId/accounting/:ledgerId/status", onlyRoles(["ADMIN", "ACCOUNTANT"]), async (req, res) => {
+router.patch("/:userId/accounting/:ledgerId/status", async (req, res) => {
   try {
     const { status } = req.body;
     if (!["PAID", "UNPAID", "PENDING", "WAIVED"].includes(status)) {
@@ -73,7 +66,7 @@ router.patch("/:userId/accounting/:ledgerId/status", onlyRoles(["ADMIN", "ACCOUN
   }
 });
 
-router.get("/:userId/library/catalog", onlyRoles(["ADMIN", "LIBRARIAN"]), async (_req, res) => {
+router.get("/:userId/library/catalog", async (_req, res) => {
   try {
     res.json(await pool.query("SELECT * FROM LIBRARY_CATALOG ORDER BY TITLE ASC"));
   } catch (error) {
@@ -82,7 +75,7 @@ router.get("/:userId/library/catalog", onlyRoles(["ADMIN", "LIBRARIAN"]), async 
   }
 });
 
-router.post("/:userId/library/catalog", onlyRoles(["ADMIN", "LIBRARIAN"]), async (req, res) => {
+router.post("/:userId/library/catalog", async (req, res) => {
   try {
     const { isbn = "", title, author, category = "", totalCopies } = req.body;
     if (!title?.trim() || !author?.trim() || !Number.isInteger(Number(totalCopies)) || Number(totalCopies) < 1) {
@@ -101,7 +94,7 @@ router.post("/:userId/library/catalog", onlyRoles(["ADMIN", "LIBRARIAN"]), async
   }
 });
 
-router.get("/:userId/library/issues", onlyRoles(["ADMIN", "LIBRARIAN"]), async (_req, res) => {
+router.get("/:userId/library/issues", async (_req, res) => {
   try {
     res.json(await pool.query(
       `SELECT I.*, C.TITLE, C.AUTHOR, S.FIRST_NAME, S.LAST_NAME, S.ROLL_NUMBER
@@ -116,7 +109,7 @@ router.get("/:userId/library/issues", onlyRoles(["ADMIN", "LIBRARIAN"]), async (
   }
 });
 
-router.post("/:userId/library/issues", onlyRoles(["ADMIN", "LIBRARIAN"]), async (req, res) => {
+router.post("/:userId/library/issues", async (req, res) => {
   let conn;
   try {
     const { bookId, studentId, dueDate } = req.body;
@@ -150,7 +143,7 @@ router.post("/:userId/library/issues", onlyRoles(["ADMIN", "LIBRARIAN"]), async 
   }
 });
 
-router.patch("/:userId/library/issues/:issueId/return", onlyRoles(["ADMIN", "LIBRARIAN"]), async (req, res) => {
+router.patch("/:userId/library/issues/:issueId/return", async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();

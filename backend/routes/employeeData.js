@@ -2,13 +2,6 @@ const express = require("express");
 const pool = require("../db");
 
 const router = express.Router();
-const onlyRoles = (roles) => (req, res, next) => {
-  if (!roles.includes(req.erpRole)) {
-    return res.status(403).json({ message: "This role does not have access to this operation." });
-  }
-  return next();
-};
-
 const defaults = {
   student: {
     background: "linear-gradient(300deg,rgba(67,10,199,0.96),rgba(255,35,15,0.95))",
@@ -25,13 +18,6 @@ const defaults = {
 };
 
 const validType = (type) => ["student", "faculty", "staff"].includes(type);
-const placementRoles = ["EMPLOYEE", "ADMIN"];
-const requirePlacementRole = (req, res, next) => {
-  if (!placementRoles.includes(req.erpRole)) {
-    return res.status(403).json({ message: "Placement access is restricted to placement staff and administrators." });
-  }
-  next();
-};
 
 router.get("/:userId/summary", async (_req, res) => {
   try {
@@ -53,7 +39,7 @@ router.get("/:userId/summary", async (_req, res) => {
   }
 });
 
-router.get("/:userId/users", onlyRoles(["ADMIN"]), async (_req, res) => {
+router.get("/:userId/users", async (_req, res) => {
   try {
     const rows = await pool.query(
       "SELECT USER_ID, USERNAME, ROLE, IS_ACTIVE, CREATED_AT FROM USERS ORDER BY CREATED_AT DESC",
@@ -65,7 +51,7 @@ router.get("/:userId/users", onlyRoles(["ADMIN"]), async (_req, res) => {
   }
 });
 
-router.patch("/:userId/users/:targetUserId/status", onlyRoles(["ADMIN"]), async (req, res) => {
+router.patch("/:userId/users/:targetUserId/status", async (req, res) => {
   try {
     const { isActive } = req.body;
     if (typeof isActive !== "boolean") {
@@ -83,7 +69,7 @@ router.patch("/:userId/users/:targetUserId/status", onlyRoles(["ADMIN"]), async 
   }
 });
 
-router.get("/:userId/feedback", onlyRoles(["ADMIN", "EMPLOYEE"]), async (_req, res) => {
+router.get("/:userId/feedback", async (_req, res) => {
   try {
     const rows = await pool.query(
       `SELECT F.FEEDBACK_ID, F.SUBJECT, F.MESSAGE, F.STATUS, F.CREATED_AT,
@@ -99,7 +85,7 @@ router.get("/:userId/feedback", onlyRoles(["ADMIN", "EMPLOYEE"]), async (_req, r
   }
 });
 
-router.get("/:userId/announcements", onlyRoles(["ADMIN", "EMPLOYEE"]), async (_req, res) => {
+router.get("/:userId/announcements", async (_req, res) => {
   try {
     res.json(await pool.query(
       `SELECT A.ANNOUNCEMENT_ID, A.TITLE, A.MESSAGE, A.AUDIENCE, A.IS_ACTIVE, A.CREATED_AT,
@@ -113,7 +99,7 @@ router.get("/:userId/announcements", onlyRoles(["ADMIN", "EMPLOYEE"]), async (_r
   }
 });
 
-router.post("/:userId/announcements", onlyRoles(["ADMIN", "EMPLOYEE"]), async (req, res) => {
+router.post("/:userId/announcements", async (req, res) => {
   try {
     const { title, message, audience = "ALL" } = req.body;
     if (!title?.trim() || !message?.trim() || !["ALL", "STUDENT", "FACULTY", "EMPLOYEE"].includes(audience)) {
@@ -141,7 +127,7 @@ router.post("/:userId/announcements", onlyRoles(["ADMIN", "EMPLOYEE"]), async (r
   }
 });
 
-router.patch("/:userId/announcements/:announcementId/status", onlyRoles(["ADMIN", "EMPLOYEE"]), async (req, res) => {
+router.patch("/:userId/announcements/:announcementId/status", async (req, res) => {
   try {
     const isActive = req.body.isActive;
     if (typeof isActive !== "boolean") return res.status(400).json({ message: "isActive must be a boolean." });
@@ -157,7 +143,7 @@ router.patch("/:userId/announcements/:announcementId/status", onlyRoles(["ADMIN"
   }
 });
 
-router.patch("/:userId/feedback/:feedbackId/status", onlyRoles(["ADMIN", "EMPLOYEE"]), async (req, res) => {
+router.patch("/:userId/feedback/:feedbackId/status", async (req, res) => {
   try {
     const { status } = req.body;
     if (!["OPEN", "IN_REVIEW", "RESOLVED"].includes(status)) {
@@ -175,7 +161,7 @@ router.patch("/:userId/feedback/:feedbackId/status", onlyRoles(["ADMIN", "EMPLOY
   }
 });
 
-router.get("/:userId/placements", requirePlacementRole, async (_req, res) => {
+router.get("/:userId/placements", async (_req, res) => {
   try {
     const drives = await pool.query(
       `SELECT D.*, COUNT(A.APPLICATION_ID) AS APPLICATION_COUNT
@@ -191,7 +177,7 @@ router.get("/:userId/placements", requirePlacementRole, async (_req, res) => {
   }
 });
 
-router.post("/:userId/placements", requirePlacementRole, async (req, res) => {
+router.post("/:userId/placements", async (req, res) => {
   try {
     const {
       companyName, roleTitle, eligibility = "", driveDate, applicationDeadline,
@@ -218,7 +204,7 @@ router.post("/:userId/placements", requirePlacementRole, async (req, res) => {
   }
 });
 
-router.patch("/:userId/placements/:driveId/status", requirePlacementRole, async (req, res) => {
+router.patch("/:userId/placements/:driveId/status", async (req, res) => {
   try {
     const { status } = req.body;
     if (!["OPEN", "CLOSED", "COMPLETED"].includes(status)) {
@@ -236,7 +222,7 @@ router.patch("/:userId/placements/:driveId/status", requirePlacementRole, async 
   }
 });
 
-router.get("/:userId/placements/applications", requirePlacementRole, async (_req, res) => {
+router.get("/:userId/placements/applications", async (_req, res) => {
   try {
     const applications = await pool.query(
       `SELECT A.APPLICATION_ID, A.DRIVE_ID, A.STATUS, A.APPLIED_AT,
@@ -253,7 +239,7 @@ router.get("/:userId/placements/applications", requirePlacementRole, async (_req
   }
 });
 
-router.patch("/:userId/placements/applications/:applicationId/status", requirePlacementRole, async (req, res) => {
+router.patch("/:userId/placements/applications/:applicationId/status", async (req, res) => {
   try {
     const { status } = req.body;
     if (!["APPLIED", "SHORTLISTED", "SELECTED", "REJECTED", "WITHDRAWN"].includes(status)) {

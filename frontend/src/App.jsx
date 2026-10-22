@@ -35,6 +35,7 @@ import AdminReports from "./components/AdminReports";
 import StudentCampusServices from "./components/StudentCampusServices";
 import CampusAdministration from "./components/CampusAdministration";
 import AdminPanelLayout from "./components/AdminPanelLayout";
+import AccessControlManager from "./components/AccessControlManager";
 import FacultyAttendance from "./components/FacultyAttendance";
 import FacultyTimetable from "./components/FacultyTimetable";
 import AcademicCourseManagement from "./components/AcademicCourseManagement";
@@ -90,6 +91,7 @@ function App() {
             <Route path="exams" element={<AdminExamManagement />} />
             <Route path="wallet" element={<WalletAdministration />} />
             <Route path="reports" element={<AdminReports />} />
+            <Route path="access" element={<AccessControlManager />} />
             <Route path="campus" element={<CampusAdministration />} />
             <Route path="accounting" element={<Accounting />} />
             <Route path="library" element={<LibraryManagement />} />

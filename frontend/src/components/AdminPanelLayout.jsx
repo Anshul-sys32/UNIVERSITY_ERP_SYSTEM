@@ -4,30 +4,31 @@ import { logout } from "../api/roleApi";
 import AnimatedSidebar, { SidebarToggle } from "./AnimatedSidebar";
 
 const adminGroups = [
-  { label: "Overview", items: [{ label: "Administration dashboard", path: "/erp/admin", icon: "home", end: true }] },
+  { label: "Overview", items: [{ label: "Administration dashboard", path: "/erp/admin", icon: "home", end: true, module: "admin_home" }] },
   { label: "Admissions", items: [
-    { label: "Admission records", path: "/erp/admin/admissions", icon: "admissions" },
-    { label: "Student management", path: "/erp/admin/students", icon: "profile" },
+    { label: "Admission records", path: "/erp/admin/admissions", icon: "admissions", module: "students" },
+    { label: "Student management", path: "/erp/admin/students", icon: "profile", module: "students" },
   ] },
   { label: "Academics", items: [
-    { label: "Course management", path: "/erp/admin/academics/courses", icon: "courses" },
-    { label: "Exams & results", path: "/erp/admin/exams", icon: "exams" },
+    { label: "Course management", path: "/erp/admin/academics/courses", icon: "courses", module: "academic_data" },
+    { label: "Exams & results", path: "/erp/admin/exams", icon: "exams", module: "exam_admin" },
   ] },
   { label: "Finance & operations", items: [
-    { label: "Accounting", path: "/erp/admin/accounting", icon: "finance" },
-    { label: "Library", path: "/erp/admin/library", icon: "library" },
-    { label: "Placements", path: "/erp/admin/placements", icon: "placements" },
+    { label: "Accounting", path: "/erp/admin/accounting", icon: "finance", module: "operations_accounting" },
+    { label: "Library", path: "/erp/admin/library", icon: "library", module: "operations_library" },
+    { label: "Placements", path: "/erp/admin/placements", icon: "placements", module: "operations_placements" },
   ] },
   { label: "Campus services", items: [
-    { label: "Hostel & research", path: "/erp/admin/campus", icon: "hostel" },
-    { label: "Campus credit wallet", path: "/erp/admin/wallet", icon: "wallet" },
+    { label: "Hostel & research", path: "/erp/admin/campus", icon: "hostel", module: "campus_admin" },
+    { label: "Campus credit wallet", path: "/erp/admin/wallet", icon: "wallet", module: "wallet_admin" },
   ] },
   { label: "Insights & system", items: [
-    { label: "Reports", path: "/erp/admin/reports", icon: "reports" },
-    { label: "Notifications", path: "/erp/notifications", icon: "notifications" },
-    { label: "Student dashboard settings", path: "/erp/admin/dashboard-config/student", icon: "settings" },
-    { label: "Faculty dashboard settings", path: "/erp/admin/dashboard-config/faculty", icon: "settings" },
-    { label: "Staff dashboard settings", path: "/erp/admin/dashboard-config/staff", icon: "settings" },
+    { label: "Reports", path: "/erp/admin/reports", icon: "reports", module: "reports" },
+    { label: "Notifications", path: "/erp/notifications", icon: "notifications", module: "notifications" },
+    { label: "Access control", path: "/erp/admin/access", icon: "users", module: "access_admin" },
+    { label: "Student dashboard settings", path: "/erp/admin/dashboard-config/student", icon: "settings", module: "dashboard_configuration" },
+    { label: "Faculty dashboard settings", path: "/erp/admin/dashboard-config/faculty", icon: "settings", module: "dashboard_configuration" },
+    { label: "Staff dashboard settings", path: "/erp/admin/dashboard-config/staff", icon: "settings", module: "dashboard_configuration" },
   ] },
 ];
 
