@@ -97,7 +97,7 @@ router.post("/:userId/hostel/applications/:applicationId/review", async (req, re
       await connection.query("UPDATE HOSTEL_APPLICATIONS SET STATUS = 'REJECTED', REVIEWED_BY = ?, REVIEWED_AT = CURRENT_TIMESTAMP WHERE APPLICATION_ID = ?", [req.auth.userId, application.APPLICATION_ID]);
       await connection.query(
         `INSERT INTO IN_APP_NOTIFICATIONS (USER_ID, TITLE, MESSAGE, NOTIFICATION_TYPE, RESOURCE_PATH)
-         SELECT S.USER_ID, 'Hostel application reviewed', 'Your hostel application was not approved.', 'HOSTEL_UPDATE', '/erp/student/campus-services'
+         SELECT S.USER_ID, 'Hostel application reviewed', 'Your hostel application was not approved.', 'HOSTEL_UPDATE', '/erp/student/hostel'
          FROM HOSTEL_APPLICATIONS A JOIN STUDENTS S ON S.STUDENT_ID = A.STUDENT_ID
          WHERE A.APPLICATION_ID = ? AND S.USER_ID IS NOT NULL`,
         [application.APPLICATION_ID],
@@ -133,7 +133,7 @@ router.post("/:userId/hostel/applications/:applicationId/review", async (req, re
     await connection.query("UPDATE HOSTEL_APPLICATIONS SET STATUS = 'APPROVED', REVIEWED_BY = ?, REVIEWED_AT = CURRENT_TIMESTAMP WHERE APPLICATION_ID = ?", [req.auth.userId, application.APPLICATION_ID]);
     await connection.query(
       `INSERT INTO IN_APP_NOTIFICATIONS (USER_ID, TITLE, MESSAGE, NOTIFICATION_TYPE, RESOURCE_PATH)
-       SELECT S.USER_ID, 'Hostel room allocated', 'Your hostel application was approved and a room was allocated.', 'HOSTEL_UPDATE', '/erp/student/campus-services'
+       SELECT S.USER_ID, 'Hostel room allocated', 'Your hostel application was approved and a room was allocated.', 'HOSTEL_UPDATE', '/erp/student/hostel'
        FROM HOSTEL_APPLICATIONS A JOIN STUDENTS S ON S.STUDENT_ID = A.STUDENT_ID
        WHERE A.APPLICATION_ID = ? AND S.USER_ID IS NOT NULL`,
       [application.APPLICATION_ID],
@@ -178,7 +178,7 @@ router.patch("/:userId/hostel/maintenance/:requestId/status", async (req, res) =
     try {
       await pool.query(
         `INSERT INTO IN_APP_NOTIFICATIONS (USER_ID, TITLE, MESSAGE, NOTIFICATION_TYPE, RESOURCE_PATH)
-         SELECT S.USER_ID, 'Hostel maintenance update', ?, 'HOSTEL_UPDATE', '/erp/student/campus-services'
+         SELECT S.USER_ID, 'Hostel maintenance update', ?, 'HOSTEL_UPDATE', '/erp/student/hostel'
          FROM HOSTEL_MAINTENANCE_REQUESTS M JOIN STUDENTS S ON S.STUDENT_ID = M.STUDENT_ID
          WHERE M.REQUEST_ID = ? AND S.USER_ID IS NOT NULL`,
         [`Your maintenance request status is now ${status.toLowerCase()}.`, req.params.requestId],
@@ -258,7 +258,7 @@ router.patch("/:userId/research/applications/:applicationId/review", async (req,
     );
     await connection.query(
       `INSERT INTO IN_APP_NOTIFICATIONS (USER_ID, TITLE, MESSAGE, NOTIFICATION_TYPE, RESOURCE_PATH)
-       SELECT S.USER_ID, 'Research application reviewed', ?, 'RESEARCH_UPDATE', '/erp/student/campus-services'
+       SELECT S.USER_ID, 'Research application reviewed', ?, 'RESEARCH_UPDATE', '/erp/student/research'
        FROM RESEARCH_APPLICATIONS A JOIN STUDENTS S ON S.STUDENT_ID = A.STUDENT_ID
        WHERE A.APPLICATION_ID = ? AND S.USER_ID IS NOT NULL`,
       [`Your research application was ${status.toLowerCase()}.`, req.params.applicationId],

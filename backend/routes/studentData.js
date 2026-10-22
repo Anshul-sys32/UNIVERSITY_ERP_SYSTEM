@@ -28,6 +28,110 @@ const requireStudent = async (req, res) => {
 
 const withStudent = (query, field = "STUDENT_ID") => `${query} WHERE ${field} = ?`;
 
+const dateOnly = (value) => {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+};
+
+const scheduledLectureCount = (startValue, endValue, scheduledDays) => {
+  if (!startValue || !endValue || !scheduledDays.size) return 0;
+  const start = new Date(`${dateOnly(startValue)}T00:00:00Z`);
+  const end = new Date(`${dateOnly(endValue)}T00:00:00Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return 0;
+  let count = 0;
+  for (const current = new Date(start); current <= end; current.setUTCDate(current.getUTCDate() + 1)) {
+    const mondayIndex = (current.getUTCDay() + 6) % 7;
+    if (scheduledDays.has(mondayIndex)) count += 1;
+  }
+  return count;
+};
+
+const loadAttendanceSummary = async (studentId) => {
+  const [scheduleRows, attendanceRows, dates] = await Promise.all([
+    pool.query(
+      `SELECT R.COURSE_ID, R.REGISTERED_AT, C.COURSE_CODE, C.TITLE, T.DAY_OF_WEEK
+       FROM COURSE_REGISTRATIONS R
+       JOIN COURSES C ON C.COURSE_ID = R.COURSE_ID
+       LEFT JOIN TIMETABLE_SLOTS T ON T.COURSE_ID = R.COURSE_ID
+       WHERE R.STUDENT_ID = ? AND R.STATUS = 'REGISTERED'
+       ORDER BY C.COURSE_CODE, T.DAY_OF_WEEK`,
+      [studentId],
+    ),
+    pool.query(
+      `SELECT A.COURSE_ID, A.LECTURE_DATE, A.STATUS
+       FROM ATTENDANCE_LOGS A
+       JOIN COURSE_REGISTRATIONS R ON R.COURSE_ID = A.COURSE_ID
+         AND R.STUDENT_ID = A.STUDENT_ID AND R.STATUS = 'REGISTERED'
+       WHERE A.STUDENT_ID = ? AND A.LECTURE_DATE >= DATE(R.REGISTERED_AT)
+         AND A.LECTURE_DATE <= CURRENT_DATE`,
+      [studentId],
+    ),
+    pool.query("SELECT CURRENT_DATE AS AS_OF_DATE"),
+  ]);
+
+  const asOfDate = dateOnly(dates[0]?.AS_OF_DATE || new Date());
+  const weekdayIndex = new Map(["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].map((day, index) => [day, index]));
+  const subjects = new Map();
+  for (const row of scheduleRows) {
+    let subject = subjects.get(Number(row.COURSE_ID));
+    if (!subject) {
+      subject = {
+        COURSE_ID: Number(row.COURSE_ID),
+        COURSE_CODE: row.COURSE_CODE,
+        TITLE: row.TITLE,
+        REGISTERED_AT: row.REGISTERED_AT,
+        SCHEDULED_DAYS: new Set(),
+      };
+      subjects.set(subject.COURSE_ID, subject);
+    }
+    const dayIndex = weekdayIndex.get(String(row.DAY_OF_WEEK || "").toUpperCase());
+    if (dayIndex !== undefined) subject.SCHEDULED_DAYS.add(dayIndex);
+  }
+
+  for (const subject of subjects.values()) {
+    subject.TOTAL_CLASSES = scheduledLectureCount(subject.REGISTERED_AT, asOfDate, subject.SCHEDULED_DAYS);
+    subject.ATTENDED_CLASSES = 0;
+    subject.TODAY_TOTAL_CLASSES = 0;
+    subject.TODAY_ATTENDED_CLASSES = 0;
+    subject.LAST_CLASS_DATE = null;
+    const today = new Date(`${asOfDate}T00:00:00Z`);
+    if (subject.SCHEDULED_DAYS.has((today.getUTCDay() + 6) % 7)) subject.TODAY_TOTAL_CLASSES = 1;
+  }
+
+  for (const row of attendanceRows) {
+    const subject = subjects.get(Number(row.COURSE_ID));
+    if (!subject) continue;
+    const lectureDate = dateOnly(row.LECTURE_DATE);
+    const day = new Date(`${lectureDate}T00:00:00Z`);
+    if (!subject.SCHEDULED_DAYS.has((day.getUTCDay() + 6) % 7)) continue;
+    if (!subject.LAST_CLASS_DATE || lectureDate > dateOnly(subject.LAST_CLASS_DATE)) subject.LAST_CLASS_DATE = lectureDate;
+    if (["PRESENT", "ON_DUTY"].includes(row.STATUS)) {
+      subject.ATTENDED_CLASSES += 1;
+      if (lectureDate === asOfDate) subject.TODAY_ATTENDED_CLASSES += 1;
+    }
+  }
+
+  const subjectRows = [...subjects.values()].map(({ SCHEDULED_DAYS, REGISTERED_AT, ...subject }) => ({
+    ...subject,
+    ATTENDANCE_PERCENT: subject.TOTAL_CLASSES
+      ? Number(((subject.ATTENDED_CLASSES / subject.TOTAL_CLASSES) * 100).toFixed(2))
+      : 0,
+  }));
+  const totalClasses = subjectRows.reduce((total, subject) => total + subject.TOTAL_CLASSES, 0);
+  const attendedClasses = subjectRows.reduce((total, subject) => total + subject.ATTENDED_CLASSES, 0);
+  const todayTotalClasses = subjectRows.reduce((total, subject) => total + subject.TODAY_TOTAL_CLASSES, 0);
+  const todayAttendedClasses = subjectRows.reduce((total, subject) => total + subject.TODAY_ATTENDED_CLASSES, 0);
+  return {
+    TODAY_PERCENT: todayTotalClasses ? Number(((todayAttendedClasses / todayTotalClasses) * 100).toFixed(2)) : 0,
+    OVERALL_PERCENT: totalClasses ? Number(((attendedClasses / totalClasses) * 100).toFixed(2)) : 0,
+    TODAY_ATTENDED_CLASSES: todayAttendedClasses,
+    TODAY_TOTAL_CLASSES: todayTotalClasses,
+    ATTENDED_CLASSES: attendedClasses,
+    TOTAL_CLASSES: totalClasses,
+    SUBJECTS: subjectRows,
+  };
+};
+
 router.get("/:userId/profile", async (req, res) => {
   try {
     const userId = Number(req.auth?.userId);
@@ -51,12 +155,12 @@ router.get("/:userId/dashboard", async (req, res) => {
   try {
     const studentId = await requireStudent(req, res);
     if (!studentId) return;
-    const [studentRows, attendanceRows, assignmentRows, resultRows] = await Promise.all([
+    const [studentRows, attendance, assignmentRows, resultRows] = await Promise.all([
       pool.query(
         "SELECT STUDENT_ID, FIRST_NAME, LAST_NAME, EMAIL, ROLL_NUMBER, CURRENT_SEMESTER, BATCH_YEAR FROM STUDENTS WHERE STUDENT_ID = ?",
         [studentId],
       ),
-      pool.query("SELECT TODAY_PERCENT, OVERALL_PERCENT FROM ATTENDANCE_SUMMARY WHERE STUDENT_ID = ?", [studentId]),
+      loadAttendanceSummary(studentId),
       pool.query(
         withStudent("SELECT ASSIGNMENT_ID, TITLE, DUE_DATE, STATUS FROM ASSIGNMENTS") + " ORDER BY DUE_DATE ASC LIMIT 5",
         [studentId],
@@ -68,7 +172,7 @@ router.get("/:userId/dashboard", async (req, res) => {
     ]);
     res.json({
       student: studentRows[0],
-      attendance: attendanceRows[0] || { TODAY_PERCENT: 0, OVERALL_PERCENT: 0 },
+      attendance,
       assignments: assignmentRows,
       results: resultRows,
     });
@@ -137,20 +241,8 @@ router.get("/:userId/attendance", async (req, res) => {
   try {
     const studentId = await requireStudent(req, res);
     if (!studentId) return;
-    res.json(await pool.query(
-      `SELECT C.COURSE_ID, C.COURSE_CODE, C.TITLE,
-        COUNT(A.ATTENDANCE_ID) AS TOTAL_CLASSES,
-        COALESCE(SUM(A.STATUS IN ('PRESENT', 'ON_DUTY')), 0) AS ATTENDED_CLASSES,
-        COALESCE(ROUND((SUM(A.STATUS IN ('PRESENT', 'ON_DUTY')) / NULLIF(COUNT(A.ATTENDANCE_ID), 0)) * 100, 2), 0) AS ATTENDANCE_PERCENT,
-        MAX(A.LECTURE_DATE) AS LAST_CLASS_DATE
-       FROM COURSE_REGISTRATIONS R
-       JOIN COURSES C ON C.COURSE_ID = R.COURSE_ID
-       LEFT JOIN ATTENDANCE_LOGS A ON A.COURSE_ID = C.COURSE_ID AND A.STUDENT_ID = R.STUDENT_ID
-       WHERE R.STUDENT_ID = ? AND R.STATUS = 'REGISTERED'
-       GROUP BY C.COURSE_ID, C.COURSE_CODE, C.TITLE
-       ORDER BY C.COURSE_CODE`,
-      [studentId],
-    ));
+    const summary = await loadAttendanceSummary(studentId);
+    res.json(summary.SUBJECTS);
   } catch (error) {
     console.error("Student attendance error:", error);
     res.status(500).json({ message: "Unable to load course attendance." });

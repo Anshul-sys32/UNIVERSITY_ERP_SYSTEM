@@ -167,4 +167,143 @@ router.patch("/:userId/registrations/:registrationId/status", async (req, res) =
   }
 });
 
+const daysOfWeek = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+const validTime = (value) => typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(value);
+const validateTimetableSlot = (body = {}) => {
+  const { courseId, dayOfWeek, startTime, endTime, room = "" } = body;
+  if (!Number.isInteger(Number(courseId)) || Number(courseId) < 1
+    || !daysOfWeek.includes(dayOfWeek) || !validTime(startTime) || !validTime(endTime)
+    || startTime >= endTime || typeof room !== "string" || room.length > 80) {
+    return "Select a course, weekday, valid start and end times, and a room no longer than 80 characters.";
+  }
+  return null;
+};
+
+router.get("/:userId/timetable-targets", async (req, res) => {
+  const audience = String(req.query.audience || "").toLowerCase();
+  if (!["student", "faculty"].includes(audience)) {
+    return res.status(400).json({ message: "Audience must be student or faculty." });
+  }
+  try {
+    const rows = audience === "student"
+      ? await pool.query(
+        `SELECT DISTINCT U.USER_ID, U.USERNAME, S.STUDENT_ID, S.ROLL_NUMBER,
+          S.FIRST_NAME, S.LAST_NAME
+         FROM USERS U JOIN STUDENTS S ON S.USER_ID = U.USER_ID
+         JOIN COURSE_REGISTRATIONS R ON R.STUDENT_ID = S.STUDENT_ID AND R.STATUS = 'REGISTERED'
+         WHERE U.ROLE = 'STUDENT' AND U.IS_ACTIVE = 1 AND S.STATUS = 'ACTIVE'
+         ORDER BY S.ROLL_NUMBER`,
+      )
+      : await pool.query(
+        `SELECT U.USER_ID, U.USERNAME, F.FACULTY_ID, F.FIRST_NAME, F.LAST_NAME, F.DEPARTMENT
+         FROM USERS U JOIN FACULTY F ON F.USER_ID = U.USER_ID
+         WHERE U.ROLE = 'FACULTY' AND U.IS_ACTIVE = 1 AND F.STATUS = 'ACTIVE'
+         ORDER BY F.FIRST_NAME, F.LAST_NAME`,
+      );
+    return res.json(rows);
+  } catch (error) {
+    console.error("Admin timetable audience listing error:", error);
+    return res.status(500).json({ message: "Unable to load timetable users." });
+  }
+});
+
+router.get("/:userId/timetable-slots", async (req, res) => {
+  const { audience, targetId, courseId } = req.query;
+  if (audience && !["student", "faculty"].includes(audience)) {
+    return res.status(400).json({ message: "Audience must be student or faculty." });
+  }
+  if (audience && (!Number.isInteger(Number(targetId)) || Number(targetId) < 1)) {
+    return res.status(400).json({ message: "A valid student or faculty user ID is required." });
+  }
+  try {
+    let audienceJoin = "";
+    let audienceWhere = "";
+    const params = [];
+    if (audience === "student") {
+      audienceJoin = `JOIN COURSE_REGISTRATIONS TR ON TR.COURSE_ID = C.COURSE_ID AND TR.STATUS = 'REGISTERED'
+        JOIN STUDENTS TS ON TS.STUDENT_ID = TR.STUDENT_ID`;
+      audienceWhere = " AND TS.USER_ID = ?";
+      params.push(targetId);
+    } else if (audience === "faculty") {
+      audienceWhere = " AND FU.USER_ID = ?";
+      params.push(targetId);
+    }
+    if (courseId !== undefined) {
+      if (!Number.isInteger(Number(courseId)) || Number(courseId) < 1) return res.status(400).json({ message: "A valid course ID is required." });
+      audienceWhere += " AND C.COURSE_ID = ?";
+      params.push(courseId);
+    }
+    const rows = await pool.query(
+      `SELECT DISTINCT T.SLOT_ID, T.COURSE_ID, T.DAY_OF_WEEK, T.START_TIME, T.END_TIME, T.ROOM,
+        C.COURSE_CODE, C.TITLE, C.SEMESTER, C.IS_ACTIVE,
+        FU.USER_ID AS FACULTY_USER_ID, FU.FIRST_NAME AS FACULTY_FIRST_NAME, FU.LAST_NAME AS FACULTY_LAST_NAME,
+        (SELECT COUNT(*) FROM COURSE_REGISTRATIONS CR WHERE CR.COURSE_ID = C.COURSE_ID AND CR.STATUS = 'REGISTERED') AS REGISTERED_STUDENTS
+       FROM TIMETABLE_SLOTS T
+       JOIN COURSES C ON C.COURSE_ID = T.COURSE_ID
+       LEFT JOIN FACULTY FU ON FU.FACULTY_ID = C.FACULTY_ID
+       ${audienceJoin}
+       WHERE 1 = 1${audienceWhere}
+       ORDER BY FIELD(T.DAY_OF_WEEK, 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'), T.START_TIME, C.COURSE_CODE`,
+      params,
+    );
+    return res.json(rows);
+  } catch (error) {
+    console.error("Admin timetable listing error:", error);
+    return res.status(500).json({ message: "Unable to load timetable slots." });
+  }
+});
+
+router.post("/:userId/timetable-slots", async (req, res) => {
+  const validationError = validateTimetableSlot(req.body);
+  if (validationError) return res.status(400).json({ message: validationError });
+  const { courseId, dayOfWeek, startTime, endTime, room = "" } = req.body;
+  try {
+    const courses = await pool.query("SELECT COURSE_ID FROM COURSES WHERE COURSE_ID = ?", [courseId]);
+    if (!courses.length) return res.status(404).json({ message: "Course not found." });
+    const result = await pool.query(
+      `INSERT INTO TIMETABLE_SLOTS (COURSE_ID, DAY_OF_WEEK, START_TIME, END_TIME, ROOM)
+       VALUES (?, ?, ?, ?, ?)`,
+      [courseId, dayOfWeek, startTime, endTime, room.trim() || null],
+    );
+    return res.status(201).json({ slotId: Number(result.insertId), message: "Timetable slot created." });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ message: "This course already has a slot starting at that time on that weekday." });
+    console.error("Admin timetable create error:", error);
+    return res.status(500).json({ message: "Unable to create timetable slot." });
+  }
+});
+
+router.put("/:userId/timetable-slots/:slotId", async (req, res) => {
+  const validationError = validateTimetableSlot(req.body);
+  if (validationError) return res.status(400).json({ message: validationError });
+  const { courseId, dayOfWeek, startTime, endTime, room = "" } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE TIMETABLE_SLOTS SET COURSE_ID = ?, DAY_OF_WEEK = ?, START_TIME = ?, END_TIME = ?, ROOM = ?
+       WHERE SLOT_ID = ?`,
+      [courseId, dayOfWeek, startTime, endTime, room.trim() || null, req.params.slotId],
+    );
+    if (!result.affectedRows) {
+      const existing = await pool.query("SELECT SLOT_ID FROM TIMETABLE_SLOTS WHERE SLOT_ID = ?", [req.params.slotId]);
+      if (!existing.length) return res.status(404).json({ message: "Timetable slot not found." });
+    }
+    return res.json({ message: "Timetable slot updated." });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ message: "This course already has a slot starting at that time on that weekday." });
+    console.error("Admin timetable update error:", error);
+    return res.status(500).json({ message: "Unable to update timetable slot." });
+  }
+});
+
+router.delete("/:userId/timetable-slots/:slotId", async (req, res) => {
+  try {
+    const result = await pool.query("DELETE FROM TIMETABLE_SLOTS WHERE SLOT_ID = ?", [req.params.slotId]);
+    if (!result.affectedRows) return res.status(404).json({ message: "Timetable slot not found." });
+    return res.json({ message: "Timetable slot deleted." });
+  } catch (error) {
+    console.error("Admin timetable delete error:", error);
+    return res.status(500).json({ message: "Unable to delete timetable slot." });
+  }
+});
+
 module.exports = router;

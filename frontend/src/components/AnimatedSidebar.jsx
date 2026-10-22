@@ -143,7 +143,7 @@ const AnimatedSidebar = ({
             {!collapsed && <p className="sidebar-theme-label">Appearance</p>}
             <div aria-label="Color theme" className="sidebar-theme-options" role="group">
               {[
-                ["original", "O", "Original colors"],
+                ["original", "O", "Default colors"],
                 ["light", "L", "Light theme"],
                 ["dark", "D", "Dark theme"],
               ].map(([value, mark, label]) => (

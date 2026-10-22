@@ -70,6 +70,8 @@ const createApp = ({
     const sectionMap = { accounting: "operations_accounting", library: "operations_library", placements: "operations_placements" };
     return pathSections(req).map((section) => sectionMap[section]).find(Boolean) || null;
   };
+  const moduleForStudentCampus = (req) => pathSections(req).includes("research") ? "campus_research" : "campus_hostel";
+  const moduleForCampusAdmin = (req) => pathSections(req).includes("research") ? "campus_admin_research" : "campus_admin_hostel";
   app.locals.mockPaymentsEnabled = mockPaymentsEnabled ?? (!production && process.env.MOCK_PAYMENTS_ENABLED !== "false");
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -114,18 +116,29 @@ const createApp = ({
       if (requestedRole !== req.auth.role && req.auth.role !== "ADMIN") {
         return res.status(403).json({ message: "Only administrators can preview another role's navigation." });
       }
-      const policies = await database.query(
-        `SELECT MODULE_KEY, ROW_SCOPE FROM ROLE_MODULE_POLICIES
-         WHERE ROLE_NAME = ? AND CAN_READ = 1 AND SIDEBAR_VISIBLE = 1 ORDER BY MODULE_KEY`,
-        [requestedRole],
-      );
-      res.json({ modules: policies.map((policy) => policy.MODULE_KEY), scopes: Object.fromEntries(policies.map((policy) => [policy.MODULE_KEY, policy.ROW_SCOPE])) });
+      const [policies, overrides] = await Promise.all([database.query(
+        `SELECT R.MODULE_KEY, COALESCE(U.ROW_SCOPE, R.ROW_SCOPE) AS ROW_SCOPE
+         FROM ROLE_MODULE_POLICIES R
+         LEFT JOIN USER_MODULE_POLICIES U ON U.MODULE_KEY = R.MODULE_KEY AND U.USER_ID = ?
+         WHERE R.ROLE_NAME = ? AND COALESCE(U.CAN_READ, R.CAN_READ) = 1
+           AND COALESCE(U.SIDEBAR_VISIBLE, R.SIDEBAR_VISIBLE) = 1 ORDER BY R.MODULE_KEY`,
+        [requestedRole === req.auth.role ? req.auth.userId : 0, requestedRole],
+      ), requestedRole === req.auth.role ? database.query(
+        "SELECT MODULE_KEY, CAN_READ, SIDEBAR_VISIBLE, ROW_SCOPE FROM USER_MODULE_POLICIES WHERE USER_ID = ?",
+        [req.auth.userId],
+      ) : Promise.resolve([])]);
+      const navigation = new Map(policies.map((policy) => [policy.MODULE_KEY, policy.ROW_SCOPE]));
+      overrides.forEach((policy) => {
+        if (Number(policy.CAN_READ) && Number(policy.SIDEBAR_VISIBLE)) navigation.set(policy.MODULE_KEY, policy.ROW_SCOPE);
+        else navigation.delete(policy.MODULE_KEY);
+      });
+      res.json({ modules: [...navigation.keys()], scopes: Object.fromEntries(navigation) });
     } catch (error) { next(error); }
   });
 
   app.use("/students", authorize(ALL_ROLES, { module: "students" }), studentRoutes);
   app.use("/student-data", authorize(ALL_ROLES, { matchPathUserId: true, module: moduleForStudent }), studentDataRoutes);
-  app.use("/campus-student", authorize(ALL_ROLES, { matchPathUserId: true, module: "campus_student" }), require("./routes/campusStudent"));
+  app.use("/campus-student", authorize(ALL_ROLES, { matchPathUserId: true, module: moduleForStudentCampus }), require("./routes/campusStudent"));
   app.use("/wallet-data", authorize(ALL_ROLES, { matchPathUserId: true, module: "wallet_data" }), require("./routes/walletStudent"));
   app.use("/merchant-data", authorize(ALL_ROLES, { matchPathUserId: true, module: "merchant_data" }), require("./routes/walletMerchant"));
   app.use("/faculty-data", (req, res, next) => {
@@ -139,8 +152,9 @@ const createApp = ({
   app.use("/wallet-admin", authorize(ALL_ROLES, { matchPathUserId: true, module: "wallet_admin" }), require("./routes/walletAdmin"));
   app.use("/notifications", authorize(ALL_ROLES, { matchPathUserId: true, module: "notifications" }), require("./routes/notifications"));
   app.use("/reports", authorize(ALL_ROLES, { matchPathUserId: true, module: "reports" }), require("./routes/reports"));
-  app.use("/campus-admin", authorize(ALL_ROLES, { matchPathUserId: true, module: "campus_admin" }), require("./routes/campusAdmin"));
-  app.use("/access-admin", authorize(["ADMIN"]), require("./routes/accessAdmin"));
+  app.use("/campus-admin", authorize(ALL_ROLES, { matchPathUserId: true, module: moduleForCampusAdmin }), require("./routes/campusAdmin"));
+  app.use("/access-admin", authorize(["ADMIN"]), require("./routes/accessAdmin")(database));
+  app.use("/admin-data", authorize(["ADMIN"]), require("./routes/adminData")(database));
 
   app.post("/login", authLimiter, async (req, res, next) => {
     const { username, password } = req.body || {};

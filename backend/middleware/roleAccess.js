@@ -32,11 +32,24 @@ const roleAccess = (roles, { matchPathUserId = false, database = pool, module } 
     if (moduleKey) {
       const actionColumn = ["GET", "HEAD", "OPTIONS"].includes(req.method.toUpperCase()) ? "CAN_READ" : "CAN_WRITE";
       const policies = await database.query(
-        `SELECT CAN_READ, CAN_WRITE, ROW_SCOPE, SIDEBAR_VISIBLE
-         FROM ROLE_MODULE_POLICIES WHERE ROLE_NAME = ? AND MODULE_KEY = ?`,
-        [users[0].ROLE, moduleKey],
+        `SELECT COALESCE(U.CAN_READ, R.CAN_READ) AS CAN_READ,
+          COALESCE(U.CAN_WRITE, R.CAN_WRITE) AS CAN_WRITE,
+          COALESCE(U.ROW_SCOPE, R.ROW_SCOPE) AS ROW_SCOPE,
+          COALESCE(U.SIDEBAR_VISIBLE, R.SIDEBAR_VISIBLE) AS SIDEBAR_VISIBLE
+         FROM ROLE_MODULE_POLICIES R
+         LEFT JOIN USER_MODULE_POLICIES U ON U.MODULE_KEY = R.MODULE_KEY AND U.USER_ID = ?
+         WHERE R.ROLE_NAME = ? AND R.MODULE_KEY = ?`,
+        [userId, users[0].ROLE, moduleKey],
       );
       policy = policies[0];
+      if (!policy) {
+        const userPolicies = await database.query(
+          `SELECT CAN_READ, CAN_WRITE, ROW_SCOPE, SIDEBAR_VISIBLE
+           FROM USER_MODULE_POLICIES WHERE USER_ID = ? AND MODULE_KEY = ?`,
+          [userId, moduleKey],
+        );
+        policy = userPolicies[0];
+      }
       if (!policy || !Number(policy[actionColumn])) {
         return res.status(403).json({ message: "This role does not have permission for this module action." });
       }

@@ -238,6 +238,13 @@ router.post("/:userId/attendance", async (req, res) => {
       [courseId, faculty.FACULTY_ID],
     );
     if (!courses.length) return res.status(403).json({ message: "You can only record attendance for your courses." });
+    const scheduledSlots = await pool.query(
+      `SELECT SLOT_ID FROM TIMETABLE_SLOTS
+       WHERE COURSE_ID = ? AND FIELD(DAY_OF_WEEK, 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY') = WEEKDAY(?) + 1
+         AND ? <= CURRENT_DATE`,
+      [courseId, lectureDate, lectureDate],
+    );
+    if (!scheduledSlots.length) return res.status(400).json({ message: "Attendance can only be recorded for a scheduled lecture date that has occurred." });
     const enrollment = await pool.query(
       "SELECT REGISTRATION_ID FROM COURSE_REGISTRATIONS WHERE COURSE_ID = ? AND STUDENT_ID = ? AND STATUS = 'REGISTERED'",
       [courseId, studentId],

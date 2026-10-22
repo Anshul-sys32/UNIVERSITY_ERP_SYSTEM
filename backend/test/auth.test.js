@@ -24,12 +24,14 @@ const examMarks = [];
 const auditEvents = [];
 const placementApplications = [];
 const policyOverrides = new Map();
+const userPolicyOverrides = new Map();
+const adminDataWrites = [];
 const policyChecks = [];
 const grants = {
-  STUDENT: ["student_profile", "student_academics", "student_finance", "student_library", "student_placements", "student_exams", "student_support", "campus_student", "wallet_data", "notifications", "announcements"],
+  STUDENT: ["student_profile", "student_academics", "student_finance", "student_library", "student_placements", "student_exams", "student_support", "campus_hostel", "campus_research", "wallet_data", "notifications", "announcements"],
   FACULTY: ["faculty_data", "faculty_academics", "faculty_questions", "faculty_rewards", "notifications", "announcements"],
   EMPLOYEE: ["employee_data", "dashboard_configuration", "announcements", "employee_feedback", "operations_placements", "notifications"],
-  ADMIN: ["admin_home", "students", "student_data", "student_profile", "student_academics", "student_finance", "student_library", "student_placements", "student_exams", "student_support", "employee_feedback", "announcements", "campus_student", "wallet_data", "faculty_data", "faculty_academics", "faculty_questions", "faculty_rewards", "employee_data", "dashboard_configuration", "user_admin", "operations_accounting", "operations_library", "operations_placements", "academic_data", "exam_admin", "wallet_admin", "campus_admin", "reports", "notifications", "access_admin"],
+  ADMIN: ["admin_home", "students", "student_data", "student_profile", "student_academics", "student_finance", "student_library", "student_placements", "student_exams", "student_support", "employee_feedback", "announcements", "campus_hostel", "campus_research", "wallet_data", "faculty_data", "faculty_academics", "faculty_questions", "faculty_rewards", "employee_data", "dashboard_configuration", "user_admin", "operations_accounting", "operations_library", "operations_placements", "academic_data", "exam_admin", "wallet_admin", "campus_admin", "reports", "notifications", "access_admin"],
   LIBRARIAN: ["employee_data", "dashboard_configuration", "operations_library", "notifications"],
   ACCOUNTANT: ["employee_data", "dashboard_configuration", "operations_accounting", "notifications"],
   MERCHANT: ["merchant_data", "notifications"],
@@ -39,25 +41,96 @@ const passwordHash = bcrypt.hashSync("correct horse battery", 4);
 const database = {
   async query(sql, params = []) {
     if (sql.includes("INSERT INTO AUDIT_EVENTS")) { auditEvents.push({ params }); return { insertId: auditEvents.length }; }
-    if (sql.includes("FROM ROLE_MODULE_POLICIES WHERE ROLE_NAME = ? AND MODULE_KEY = ?")) {
-      policyChecks.push([params[0], params[1]]);
-      const key = `${params[0]}:${params[1]}`;
-      if (policyOverrides.has(key)) return [policyOverrides.get(key)];
-      const allowed = (grants[params[0]] || []).includes(params[1]);
-      return allowed ? [{ CAN_READ: 1, CAN_WRITE: 1, ROW_SCOPE: params[0] === "FACULTY" ? "assigned_course" : "university", SIDEBAR_VISIBLE: 1 }] : [];
+    if (sql.includes("FROM information_schema.TABLES")) return [{ TABLE_NAME: "AUDIT_EVENTS" }, { TABLE_NAME: "USERS" }, { TABLE_NAME: "STUDENTS" }];
+    if (sql.includes("FROM information_schema.COLUMNS")) {
+      if (params[0] === "AUDIT_EVENTS") return [
+        { COLUMN_NAME: "AUDIT_EVENT_ID", DATA_TYPE: "bigint", COLUMN_TYPE: "bigint unsigned", IS_NULLABLE: "NO", COLUMN_DEFAULT: null, EXTRA: "auto_increment", COLUMN_KEY: "PRI", ORDINAL_POSITION: 1 },
+        { COLUMN_NAME: "ACTION", DATA_TYPE: "varchar", COLUMN_TYPE: "varchar(12)", IS_NULLABLE: "NO", COLUMN_DEFAULT: null, EXTRA: "", COLUMN_KEY: "", ORDINAL_POSITION: 2 },
+      ];
+      assert.equal(params[0], "USERS");
+      return [
+        { COLUMN_NAME: "USER_ID", DATA_TYPE: "int", COLUMN_TYPE: "int unsigned", IS_NULLABLE: "NO", COLUMN_DEFAULT: null, EXTRA: "auto_increment", COLUMN_KEY: "PRI", ORDINAL_POSITION: 1 },
+        { COLUMN_NAME: "USERNAME", DATA_TYPE: "varchar", COLUMN_TYPE: "varchar(100)", IS_NULLABLE: "NO", COLUMN_DEFAULT: null, EXTRA: "", COLUMN_KEY: "", ORDINAL_POSITION: 2 },
+        { COLUMN_NAME: "PASSWORD_HASH", DATA_TYPE: "varchar", COLUMN_TYPE: "varchar(255)", IS_NULLABLE: "NO", COLUMN_DEFAULT: null, EXTRA: "", COLUMN_KEY: "", ORDINAL_POSITION: 3 },
+        { COLUMN_NAME: "ROLE", DATA_TYPE: "enum", COLUMN_TYPE: "enum('STUDENT','EMPLOYEE','ADMIN')", IS_NULLABLE: "NO", COLUMN_DEFAULT: "STUDENT", EXTRA: "", COLUMN_KEY: "", ORDINAL_POSITION: 4 },
+        { COLUMN_NAME: "IS_ACTIVE", DATA_TYPE: "tinyint", COLUMN_TYPE: "tinyint(1)", IS_NULLABLE: "NO", COLUMN_DEFAULT: "1", EXTRA: "", COLUMN_KEY: "", ORDINAL_POSITION: 5 },
+        { COLUMN_NAME: "CREATED_AT", DATA_TYPE: "timestamp", COLUMN_TYPE: "timestamp", IS_NULLABLE: "NO", COLUMN_DEFAULT: "current_timestamp()", EXTRA: "DEFAULT_GENERATED", COLUMN_KEY: "", ORDINAL_POSITION: 6 },
+      ];
     }
-    if (sql.includes("FROM ROLE_MODULE_POLICIES") && sql.includes("SIDEBAR_VISIBLE = 1")) {
-      const role = params[0];
+    if (sql.startsWith("INSERT INTO `USERS`") || sql.startsWith("INSERT INTO `AUDIT_EVENTS`")) {
+      adminDataWrites.push({ sql, params });
+      return { insertId: 88, affectedRows: 1 };
+    }
+    if (sql.startsWith("UPDATE `USERS`") || sql.startsWith("UPDATE `AUDIT_EVENTS`")) {
+      adminDataWrites.push({ sql, params });
+      if (params.includes("UNCHANGED")) return { affectedRows: 0 };
+      return { affectedRows: 1 };
+    }
+    if (sql.startsWith("DELETE FROM `USERS`") || sql.startsWith("DELETE FROM `AUDIT_EVENTS`")) {
+      adminDataWrites.push({ sql, params });
+      return { affectedRows: 1 };
+    }
+    if (sql.includes("FROM `USERS` ORDER BY `USER_ID` LIMIT ? OFFSET ?")) {
+      return users.map(({ USER_ID, USERNAME, ROLE, IS_ACTIVE }) => ({ USER_ID, USERNAME, ROLE, IS_ACTIVE, CREATED_AT: "2026-01-01" }));
+    }
+    if (sql.includes("SELECT 1 AS RECORD_EXISTS FROM `USERS` WHERE `USER_ID` = ? LIMIT 1")) {
+      return [{ RECORD_EXISTS: 1 }];
+    }
+    if (sql.includes("FROM ROLE_MODULE_POLICIES R") && sql.includes("USER_MODULE_POLICIES U") && sql.includes("R.MODULE_KEY = ?")) {
+      const [userId, role, moduleKey] = params;
+      policyChecks.push([role, moduleKey]);
+      const userKey = `${userId}:${moduleKey}`;
+      if (userPolicyOverrides.has(userKey)) return [userPolicyOverrides.get(userKey)];
+      const key = `${role}:${moduleKey}`;
+      if (policyOverrides.has(key)) return [policyOverrides.get(key)];
+      const allowed = (grants[role] || []).includes(moduleKey);
+      return allowed ? [{ CAN_READ: 1, CAN_WRITE: 1, ROW_SCOPE: role === "FACULTY" ? "assigned_course" : "university", SIDEBAR_VISIBLE: 1 }] : [];
+    }
+    if (sql.includes("SELECT R.MODULE_KEY") && sql.includes("USER_MODULE_POLICIES U")) {
+      const [userId, role] = params;
       const keys = new Set(grants[role] || []);
       for (const [key, policy] of policyOverrides.entries()) {
         const [policyRole, moduleKey] = key.split(":");
         if (policyRole === role && Number(policy.CAN_READ) && Number(policy.SIDEBAR_VISIBLE)) keys.add(moduleKey);
         if (policyRole === role && (!Number(policy.CAN_READ) || !Number(policy.SIDEBAR_VISIBLE))) keys.delete(moduleKey);
       }
+      for (const [key, policy] of userPolicyOverrides.entries()) {
+        const [policyUserId, moduleKey] = key.split(":");
+        if (Number(policyUserId) === Number(userId) && Number(policy.CAN_READ) && Number(policy.SIDEBAR_VISIBLE)) keys.add(moduleKey);
+        if (Number(policyUserId) === Number(userId) && (!Number(policy.CAN_READ) || !Number(policy.SIDEBAR_VISIBLE))) keys.delete(moduleKey);
+      }
       return [...keys].map((MODULE_KEY) => ({ MODULE_KEY, ROW_SCOPE: "self" }));
+    }
+    if (sql.includes("SELECT MODULE_KEY, CAN_READ, SIDEBAR_VISIBLE, ROW_SCOPE FROM USER_MODULE_POLICIES WHERE USER_ID = ?")) {
+      return [...userPolicyOverrides.entries()].filter(([key]) => Number(key.split(":")[0]) === Number(params[0]))
+        .map(([key, policy]) => ({ MODULE_KEY: key.split(":")[1], ...policy }));
+    }
+    if (sql.includes("FROM USER_MODULE_POLICIES WHERE USER_ID = ? AND MODULE_KEY = ?")) {
+      const policy = userPolicyOverrides.get(`${params[0]}:${params[1]}`);
+      return policy ? [policy] : [];
     }
     if (sql.includes("INSERT INTO ROLE_MODULE_POLICIES")) {
       policyOverrides.set(`${params[0]}:${params[1]}`, { CAN_READ: params[2], CAN_WRITE: params[3], ROW_SCOPE: params[4], SIDEBAR_VISIBLE: params[5] });
+      return { affectedRows: 1 };
+    }
+    if (sql.includes("SELECT USER_ID, ROLE FROM USERS WHERE USER_ID = ? AND IS_ACTIVE = 1")) {
+      return users.filter((user) => user.USER_ID === Number(params[0]) && user.IS_ACTIVE && user.ROLE !== "ADMIN");
+    }
+    if (sql.includes("SELECT USER_ID, USERNAME, ROLE FROM USERS WHERE IS_ACTIVE = 1")) {
+      return users.filter((user) => user.IS_ACTIVE && user.ROLE !== "ADMIN");
+    }
+    if (sql.includes("FROM ROLE_MODULE_POLICIES ORDER BY ROLE_NAME")) {
+      return Object.entries(grants).flatMap(([ROLE_NAME, moduleKeys]) => moduleKeys.map((MODULE_KEY) => ({ ROLE_NAME, MODULE_KEY, CAN_READ: 1, CAN_WRITE: 1, ROW_SCOPE: "university", SIDEBAR_VISIBLE: 1 })));
+    }
+    if (sql.includes("FROM USER_MODULE_POLICIES ORDER BY USER_ID")) {
+      return [...userPolicyOverrides.entries()].map(([key, policy]) => ({ USER_ID: Number(key.split(":")[0]), MODULE_KEY: key.split(":")[1], ...policy }));
+    }
+    if (sql.includes("INSERT INTO USER_MODULE_POLICIES")) {
+      userPolicyOverrides.set(`${params[0]}:${params[1]}`, { CAN_READ: params[2], CAN_WRITE: params[3], ROW_SCOPE: params[4], SIDEBAR_VISIBLE: params[5] });
+      return { affectedRows: 1 };
+    }
+    if (sql.includes("DELETE FROM USER_MODULE_POLICIES")) {
+      userPolicyOverrides.delete(`${params[0]}:${params[1]}`);
       return { affectedRows: 1 };
     }
     if (sql.includes("FROM USERS WHERE USERNAME =")) {
@@ -92,6 +165,27 @@ const database = {
         STATUS: "ACTIVE",
       }] : [];
     }
+    if (sql.includes("SELECT STUDENT_ID, FIRST_NAME, LAST_NAME, EMAIL, ROLL_NUMBER") && sql.includes("FROM STUDENTS WHERE STUDENT_ID = ?")) {
+      return [{ STUDENT_ID: Number(params[0]), FIRST_NAME: "Student", LAST_NAME: "One", EMAIL: "student.one@example.edu", ROLL_NUMBER: "R-001", CURRENT_SEMESTER: 2, BATCH_YEAR: 2025 }];
+    }
+    if (sql.includes("FROM COURSE_REGISTRATIONS R") && sql.includes("LEFT JOIN TIMETABLE_SLOTS T") && sql.includes("R.REGISTERED_AT")) {
+      return [
+        { COURSE_ID: 20, REGISTERED_AT: "2026-10-01 00:00:00", COURSE_CODE: "CS101", TITLE: "Intro to Computing", DAY_OF_WEEK: "MONDAY" },
+        { COURSE_ID: 20, REGISTERED_AT: "2026-10-01 00:00:00", COURSE_CODE: "CS101", TITLE: "Intro to Computing", DAY_OF_WEEK: "WEDNESDAY" },
+        { COURSE_ID: 21, REGISTERED_AT: "2026-10-01 00:00:00", COURSE_CODE: "MA101", TITLE: "Mathematics", DAY_OF_WEEK: "THURSDAY" },
+      ];
+    }
+    if (sql.includes("FROM ATTENDANCE_LOGS A") && sql.includes("R.REGISTERED_AT")) {
+      return [
+        { COURSE_ID: 20, LECTURE_DATE: "2026-10-05", STATUS: "PRESENT" },
+        { COURSE_ID: 20, LECTURE_DATE: "2026-10-12", STATUS: "ABSENT" },
+        { COURSE_ID: 20, LECTURE_DATE: "2026-10-19", STATUS: "ON_DUTY" },
+        { COURSE_ID: 21, LECTURE_DATE: "2026-10-22", STATUS: "PRESENT" },
+      ];
+    }
+    if (sql.includes("SELECT CURRENT_DATE AS AS_OF_DATE")) return [{ AS_OF_DATE: "2026-10-22" }];
+    if (sql.includes("FROM ASSIGNMENTS") && sql.includes("WHERE STUDENT_ID = ?")) return [];
+    if (sql.includes("FROM RESULTS") && sql.includes("WHERE STUDENT_ID = ?")) return [];
     if (sql.includes("INSERT INTO FEEDBACK")) return { insertId: 500 };
     if (sql.includes("FROM PLACEMENT_DRIVES D") && sql.includes("LEFT JOIN PLACEMENT_APPLICATIONS")) {
       return [{ DRIVE_ID: 40, COMPANY_NAME: "Synthetic Co", ROLE_TITLE: "Intern", STATUS: "OPEN", APPLICATION_DEADLINE: "2026-12-01", APPLICATION_STATUS: placementApplications.find((application) => application.studentId === Number(params[0]))?.status || null }];
@@ -128,6 +222,9 @@ const database = {
       if (sql.includes("FROM FACULTY_FORMS WHERE FACULTY_ID =")) return [{ TOTAL: 0 }];
     if (sql.includes("FROM COURSES WHERE COURSE_ID = ? AND FACULTY_ID = ?")) {
       return Number(params[0]) === 20 && Number(params[1]) === 103 ? [{ COURSE_ID: 20 }] : [];
+    }
+    if (sql.includes("FROM TIMETABLE_SLOTS") && sql.includes("WEEKDAY(?) + 1")) {
+      return Number(params[0]) === 20 && params[1] === "2026-10-22" ? [{ SLOT_ID: 1 }] : [];
     }
     if (sql.includes("FROM COURSE_REGISTRATIONS WHERE COURSE_ID = ? AND STUDENT_ID = ?")) {
       return Number(params[0]) === 20 && Number(params[1]) === 200 ? [{ REGISTRATION_ID: 1 }] : [];
@@ -310,11 +407,93 @@ test("student cannot access wallet administration or merchant APIs", async () =>
   await agent.get("/access-admin/policies").expect(403);
 });
 
+test("admin database console supports CRUD across ordinary and audit tables with password-safe user handling", async () => {
+  const student = await signedInAgent("student.one@example.edu");
+  await student.agent.get("/admin-data/tables").expect(403);
+
+  const { agent } = await signedInAgent("admin@example.edu");
+  const tables = await agent.get("/admin-data/tables").expect(200);
+  assert.deepEqual(tables.body.tables, ["AUDIT_EVENTS", "USERS", "STUDENTS"]);
+
+  const records = await agent.get("/admin-data/USERS").expect(200);
+  const csrfToken = await csrfFor(agent);
+  assert.ok(records.body.columns.some((column) => column.name === "PASSWORD"));
+  assert.ok(!records.body.columns.some((column) => column.name === "PASSWORD_HASH"));
+  assert.ok(records.body.rows.every((row) => !Object.hasOwn(row, "PASSWORD_HASH")));
+  assert.ok(records.body.columns.find((column) => column.name === "CREATED_AT").readOnly);
+
+  await agent.post("/admin-data/AUDIT_EVENTS").set("X-CSRF-Token", csrfToken).send({ values: { ACTION: "DELETE" } }).expect(201);
+  assert.ok(adminDataWrites.at(-1).sql.startsWith("INSERT INTO `AUDIT_EVENTS`"));
+  await agent.put("/admin-data/AUDIT_EVENTS").set("X-CSRF-Token", csrfToken).send({ key: { AUDIT_EVENT_ID: 1 }, values: { ACTION: "PATCH" } }).expect(200);
+  assert.ok(adminDataWrites.at(-1).sql.startsWith("UPDATE `AUDIT_EVENTS`"));
+  await agent.delete("/admin-data/AUDIT_EVENTS").set("X-CSRF-Token", csrfToken).send({ key: { AUDIT_EVENT_ID: 1 } }).expect(200);
+  assert.ok(adminDataWrites.at(-1).sql.startsWith("DELETE FROM `AUDIT_EVENTS`"));
+
+  await agent.post("/admin-data/USERS")
+    .set("X-CSRF-Token", csrfToken)
+    .send({ values: { USERNAME: "new.staff@example.edu", PASSWORD: "a-new-secure-password", ROLE: "EMPLOYEE", IS_ACTIVE: 1 } })
+    .expect(201);
+  const insert = adminDataWrites.at(-1);
+  assert.ok(insert.sql.includes("`PASSWORD_HASH`"));
+  assert.ok(!insert.params.includes("a-new-secure-password"));
+  assert.ok(await bcrypt.compare("a-new-secure-password", insert.params[1]));
+
+  await agent.put("/admin-data/USERS")
+    .set("X-CSRF-Token", csrfToken)
+    .send({ key: { USER_ID: 88 }, values: { PASSWORD: "another-secure-password", IS_ACTIVE: 0 } })
+    .expect(200);
+  const update = adminDataWrites.at(-1);
+  assert.ok(update.sql.includes("`PASSWORD_HASH` = ?"));
+  assert.ok(await bcrypt.compare("another-secure-password", update.params[0]));
+
+  await agent.put("/admin-data/USERS")
+    .set("X-CSRF-Token", csrfToken)
+    .send({ key: { USER_ID: 88 }, values: { USERNAME: "UNCHANGED" } })
+    .expect(200);
+
+  await agent.delete("/admin-data/USERS")
+    .set("X-CSRF-Token", csrfToken)
+    .send({ key: { USER_ID: 88 } })
+    .expect(200);
+  assert.ok(adminDataWrites.at(-1).sql.startsWith("DELETE FROM `USERS`"));
+});
+
 test("role navigation is derived from sidebar-enabled read policies", async () => {
   const { agent } = await signedInAgent("student.one@example.edu");
   const response = await agent.get("/me/navigation").expect(200);
   assert.ok(response.body.modules.includes("student_finance"));
   assert.ok(!response.body.modules.includes("wallet_admin"));
+});
+
+test("student attendance totals use scheduled timetable lectures and report per subject", async () => {
+  const { agent } = await signedInAgent("student.one@example.edu");
+  const response = await agent.get("/student-data/1/dashboard").expect(200);
+  assert.equal(response.body.attendance.TOTAL_CLASSES, 10);
+  assert.equal(response.body.attendance.ATTENDED_CLASSES, 3);
+  assert.equal(response.body.attendance.OVERALL_PERCENT, 30);
+  assert.equal(response.body.attendance.TODAY_TOTAL_CLASSES, 1);
+  assert.equal(response.body.attendance.TODAY_ATTENDED_CLASSES, 1);
+  assert.equal(response.body.attendance.TODAY_PERCENT, 100);
+  assert.deepEqual(response.body.attendance.SUBJECTS.map((subject) => ({
+    COURSE_CODE: subject.COURSE_CODE,
+    TOTAL_CLASSES: subject.TOTAL_CLASSES,
+    ATTENDED_CLASSES: subject.ATTENDED_CLASSES,
+    ATTENDANCE_PERCENT: subject.ATTENDANCE_PERCENT,
+  })), [
+    { COURSE_CODE: "CS101", TOTAL_CLASSES: 6, ATTENDED_CLASSES: 2, ATTENDANCE_PERCENT: 33.33 },
+    { COURSE_CODE: "MA101", TOTAL_CLASSES: 4, ATTENDED_CLASSES: 1, ATTENDANCE_PERCENT: 25 },
+  ]);
+});
+
+test("access policy list exposes active users and separate campus modules", async () => {
+  const { agent } = await signedInAgent("admin@example.edu");
+  const response = await agent.get("/access-admin/policies").expect(200);
+  assert.ok(response.body.users.some((user) => user.USER_ID === 1 && user.ROLE === "STUDENT"));
+  assert.ok(response.body.modules.some((module) => module.key === "campus_hostel"));
+  assert.ok(response.body.modules.some((module) => module.key === "campus_research"));
+  assert.ok(response.body.modules.some((module) => module.key === "campus_admin_hostel"));
+  assert.ok(response.body.modules.some((module) => module.key === "campus_admin_research"));
+  assert.ok(!response.body.modules.some((module) => module.key === "campus_admin"));
 });
 
 test("administrator can change another role's backend module and sidebar grant", async () => {
@@ -331,6 +510,36 @@ test("administrator can change another role's backend module and sidebar grant",
     const navigation = await agent.get("/me/navigation?role=STUDENT").expect(200);
     assert.ok(!navigation.body.modules.includes("student_finance"), JSON.stringify(navigation.body.modules));
   } finally {
+    policyOverrides.delete("STUDENT:student_finance");
+  }
+});
+
+test("administrator can override one user without changing role access for peers", async () => {
+  const { agent } = await signedInAgent("admin@example.edu");
+  const csrfToken = await csrfFor(agent);
+  userPolicyOverrides.delete("1:student_finance");
+  policyOverrides.delete("STUDENT:student_finance");
+  try {
+    await agent.put("/access-admin/policies/users/1/student_finance")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ canRead: false, canWrite: false, rowScope: "self", sidebarVisible: false })
+      .expect(200);
+    const firstStudent = await signedInAgent("student.one@example.edu");
+    const firstNav = await firstStudent.agent.get("/me/navigation").expect(200);
+    assert.ok(!firstNav.body.modules.includes("student_finance"));
+    const secondStudent = await signedInAgent("student.two@example.edu");
+    const secondNav = await secondStudent.agent.get("/me/navigation").expect(200);
+    assert.ok(secondNav.body.modules.includes("student_finance"));
+    await agent.put("/access-admin/policies/users/1/reports")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ canRead: true, canWrite: false, rowScope: "university", sidebarVisible: true })
+      .expect(403);
+    await agent.put("/access-admin/policies/STUDENT/reports")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ canRead: true, canWrite: false, rowScope: "university", sidebarVisible: true })
+      .expect(403);
+  } finally {
+    userPolicyOverrides.delete("1:student_finance");
     policyOverrides.delete("STUDENT:student_finance");
   }
 });
@@ -449,4 +658,12 @@ test("faculty cannot record attendance for a student not registered in the cours
     .set("X-CSRF-Token", csrfToken)
     .send({ courseId: 20, studentId: 201, lectureDate: "2026-10-22", status: "PRESENT" })
     .expect(403, { message: "The student is not registered for this course." });
+});
+
+test("faculty attendance date must be scheduled for the course", async () => {
+  const { agent, csrfToken } = await signedInAgent("faculty.one@example.edu");
+  await agent.post("/faculty-data/3/attendance")
+    .set("X-CSRF-Token", csrfToken)
+    .send({ courseId: 20, studentId: 200, lectureDate: "2026-10-23", status: "PRESENT" })
+    .expect(400, { message: "Attendance can only be recorded for a scheduled lecture date that has occurred." });
 });

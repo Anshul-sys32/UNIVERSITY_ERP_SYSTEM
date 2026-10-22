@@ -23,6 +23,7 @@
    mysql -u root -p university_erp < backend/migrations/005_create_audit_notifications.sql
    mysql -u root -p university_erp < backend/migrations/006_create_hostel_research_workflows.sql
    mysql -u root -p university_erp < backend/migrations/007_create_role_module_policies.sql
+   mysql -u root -p university_erp < backend/migrations/008_create_user_access_overrides.sql
    ```
 
 4. Copy `backend/.env.example` to `backend/.env`. Set `SESSION_SECRET` to a unique random value from `openssl rand -base64 48` and configure local database credentials. Do not commit `.env`.
@@ -61,8 +62,11 @@ The frontend must send cookies with `credentials: "include"` and include the CSR
 - `/notifications/:userId`: read and mark the signed-in user's in-app notifications.
 - `/reports/:userId/overview`: admin-only aggregate reporting without student-level rows.
 - `/access-admin/policies`: administrator-only role/module read, write, sidebar visibility, and supported row-scope policy management. `/me/navigation` returns the signed-in role's sidebar-visible module grants; administrators may preview another role with `?role=ROLE`.
+- `/admin-data/tables` and `/admin-data/:table`: administrator-only, metadata-driven CRUD for every base table in the active database, including system and ledger tables. The frontend's Database records page discovers tables and columns from `information_schema`; MariaDB continues enforcing foreign keys, unique keys, and checks. `USERS.PASSWORD_HASH` is write-only and submitted passwords are bcrypt-hashed server-side. These operations are audited; use caution when editing or deleting financial, audit, session, and access-policy records.
 
 Role grants are evaluated on the server for every mounted module request. The access console only offers row scopes supported by that module. Existing ownership checks (student self records, assigned faculty courses) remain in force and cannot be widened by changing sidebar visibility.
+
+The admin Database records page is intended for controlled administration and can affect related records through database cascade rules. It is restricted to administrator sessions; table and column identifiers are discovered from the selected database metadata, while record values use parameterized SQL. All base tables support create/read/update/delete; MariaDB foreign-key constraints may reject deletes while dependent rows exist.
 
 The backend uses Express 5 and MariaDB/MySQL. Use a least-privilege database account outside local development.
 
