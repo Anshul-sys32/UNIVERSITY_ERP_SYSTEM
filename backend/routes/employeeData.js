@@ -2,6 +2,12 @@ const express = require("express");
 const pool = require("../db");
 
 const router = express.Router();
+const onlyRoles = (roles) => (req, res, next) => {
+  if (!roles.includes(req.erpRole)) {
+    return res.status(403).json({ message: "This role does not have access to this operation." });
+  }
+  return next();
+};
 
 const defaults = {
   student: {
@@ -47,7 +53,7 @@ router.get("/:userId/summary", async (_req, res) => {
   }
 });
 
-router.get("/:userId/users", async (_req, res) => {
+router.get("/:userId/users", onlyRoles(["ADMIN"]), async (_req, res) => {
   try {
     const rows = await pool.query(
       "SELECT USER_ID, USERNAME, ROLE, IS_ACTIVE, CREATED_AT FROM USERS ORDER BY CREATED_AT DESC",
@@ -59,7 +65,7 @@ router.get("/:userId/users", async (_req, res) => {
   }
 });
 
-router.patch("/:userId/users/:targetUserId/status", async (req, res) => {
+router.patch("/:userId/users/:targetUserId/status", onlyRoles(["ADMIN"]), async (req, res) => {
   try {
     const { isActive } = req.body;
     if (typeof isActive !== "boolean") {
@@ -77,7 +83,7 @@ router.patch("/:userId/users/:targetUserId/status", async (req, res) => {
   }
 });
 
-router.get("/:userId/feedback", async (_req, res) => {
+router.get("/:userId/feedback", onlyRoles(["ADMIN", "EMPLOYEE"]), async (_req, res) => {
   try {
     const rows = await pool.query(
       `SELECT F.FEEDBACK_ID, F.SUBJECT, F.MESSAGE, F.STATUS, F.CREATED_AT,
@@ -93,7 +99,7 @@ router.get("/:userId/feedback", async (_req, res) => {
   }
 });
 
-router.get("/:userId/announcements", async (_req, res) => {
+router.get("/:userId/announcements", onlyRoles(["ADMIN", "EMPLOYEE"]), async (_req, res) => {
   try {
     res.json(await pool.query(
       `SELECT A.ANNOUNCEMENT_ID, A.TITLE, A.MESSAGE, A.AUDIENCE, A.IS_ACTIVE, A.CREATED_AT,
@@ -107,7 +113,7 @@ router.get("/:userId/announcements", async (_req, res) => {
   }
 });
 
-router.post("/:userId/announcements", async (req, res) => {
+router.post("/:userId/announcements", onlyRoles(["ADMIN", "EMPLOYEE"]), async (req, res) => {
   try {
     const { title, message, audience = "ALL" } = req.body;
     if (!title?.trim() || !message?.trim() || !["ALL", "STUDENT", "FACULTY", "EMPLOYEE"].includes(audience)) {
@@ -124,7 +130,7 @@ router.post("/:userId/announcements", async (req, res) => {
   }
 });
 
-router.patch("/:userId/announcements/:announcementId/status", async (req, res) => {
+router.patch("/:userId/announcements/:announcementId/status", onlyRoles(["ADMIN", "EMPLOYEE"]), async (req, res) => {
   try {
     const isActive = req.body.isActive;
     if (typeof isActive !== "boolean") return res.status(400).json({ message: "isActive must be a boolean." });
@@ -140,7 +146,7 @@ router.patch("/:userId/announcements/:announcementId/status", async (req, res) =
   }
 });
 
-router.patch("/:userId/feedback/:feedbackId/status", async (req, res) => {
+router.patch("/:userId/feedback/:feedbackId/status", onlyRoles(["ADMIN", "EMPLOYEE"]), async (req, res) => {
   try {
     const { status } = req.body;
     if (!["OPEN", "IN_REVIEW", "RESOLVED"].includes(status)) {

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { dashboardSettings } from "../config/dashboardConfig";
 import { fetchStudentResource } from "../api/studentApi";
+import { logout } from "../api/roleApi";
 import BellIcon from "../assets/icons/bell.png";
 import UserIcon from "../assets/icons/profile.png";
 import ExitIcon from "../assets/icons/logout.png";
@@ -73,7 +74,7 @@ const StudentDashboard = () => {
               </NavLink>
             ))}
           </nav>
-          <button className="mt-6 flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-white/75 hover:bg-white/15 hover:text-white" onClick={() => { sessionStorage.removeItem("erpUser"); navigate("/"); }} type="button">
+          <button className="mt-6 flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-white/75 hover:bg-white/15 hover:text-white" onClick={async () => { await logout(); navigate("/"); }} type="button">
             <img src={ExitIcon} alt="" className="h-6 w-6" /> Sign out
           </button>
         </aside>

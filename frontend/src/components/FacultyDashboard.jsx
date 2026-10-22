@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { facultyRequest } from "../api/roleApi";
+import { logout } from "../api/roleApi";
 
 const FacultyDashboard = () => {
   const location = useLocation();
@@ -32,7 +33,7 @@ const FacultyDashboard = () => {
           <nav className="mt-8 grid grid-cols-2 gap-2 md:block md:space-y-1">
             {navItems.map(([label, path]) => <NavLink className={({ isActive }) => `block rounded-xl px-4 py-3 text-sm transition ${isActive ? "bg-white font-semibold text-slate-900" : "text-white/75 hover:bg-white/15 hover:text-white"}`} end={path === "/erp/faculty"} key={path} to={path}>{label}</NavLink>)}
           </nav>
-          <button className="mt-6 rounded-xl px-4 py-3 text-sm text-white/75 hover:bg-white/15 hover:text-white" onClick={() => { sessionStorage.removeItem("erpUser"); navigate("/"); }} type="button">Sign out</button>
+          <button className="mt-6 rounded-xl px-4 py-3 text-sm text-white/75 hover:bg-white/15 hover:text-white" onClick={async () => { await logout(); navigate("/"); }} type="button">Sign out</button>
         </aside>
         <main className="min-w-0 flex-1 p-5 sm:p-8">
           <header className="mb-8"><p className="text-sm text-white/60">Faculty workspace</p><h2 className="mt-1 text-3xl font-bold">{faculty ? `Welcome, ${faculty.FIRST_NAME}` : "Welcome, Faculty"}</h2></header>

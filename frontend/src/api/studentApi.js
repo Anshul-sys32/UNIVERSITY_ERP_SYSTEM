@@ -1,34 +1,23 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { apiRequest, getCurrentUser } from "./roleApi";
 
 export const getStudentUserId = () => {
-  try {
-    const user = JSON.parse(sessionStorage.getItem("erpUser") || "null");
-    return user?.user_id || null;
-  } catch {
-    return null;
-  }
+  const user = getCurrentUser();
+  return user?.role === "STUDENT" ? user.user_id : null;
 };
 
-export const fetchStudentResource = async (resource) => {
+export const fetchStudentResource = (resource) => {
   const userId = getStudentUserId();
   if (!userId) throw new Error("Please sign in with a student account first.");
-  const response = await fetch(`${API_URL}/student-data/${userId}/${resource}`);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message || "Unable to load student data.");
-  return data;
+  return apiRequest(`/student-data/${userId}/${resource}`);
 };
 
-export const submitStudentFeedback = async (payload) => {
+export const submitStudentFeedback = (payload) => {
   const userId = getStudentUserId();
   if (!userId) throw new Error("Please sign in with a student account first.");
-  const response = await fetch(`${API_URL}/student-data/${userId}/feedback`, {
+  return apiRequest(`/student-data/${userId}/feedback`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message || "Unable to submit feedback.");
-  return data;
 };
 
 export const formatDate = (value) => value

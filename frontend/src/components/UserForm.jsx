@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { login } from "../api/roleApi";
 
 const destinationByRole = {
   STUDENT: "/erp/student",
@@ -26,16 +27,7 @@ function UserForm() {
     event.preventDefault();
     setError("");
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5000"}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.message || "Login failed.");
-        return;
-      }
+      const data = await login(username, password);
       const selectedRole = role.toUpperCase();
       const employeeRoles = ["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"];
       const roleMatches = selectedRole === "EMPLOYEE"
@@ -45,7 +37,6 @@ function UserForm() {
         setError(`This account is registered as ${data.role.toLowerCase()}, not ${role}.`);
         return;
       }
-      sessionStorage.setItem("erpUser", JSON.stringify(data));
       navigate(destinationByRole[data.role] || "/erp/student");
     } catch (requestError) {
       console.error("Login error:", requestError);

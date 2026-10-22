@@ -1,128 +1,52 @@
 # University ERP backend
 
-## MySQL setup
+## Local setup
 
-1. Create the database and tables with `mysql -u root -p < schema.sql`.
-   Re-run this command after pulling updates; the schema uses `IF NOT EXISTS`
-   and will add the new student ERP tables without removing existing records.
-2. Copy `.env.example` to `.env` and set the MySQL credentials.
-3. Start the API with `node index.js`.
+1. Create the database and import the base schema:
 
-The API exposes `GET /health`, `POST /login`, `POST /register`, CRUD endpoints
-under `/students`, and student-facing data endpoints under
-`/student-data/:userId` for the dashboard, assignments, fees, library, events,
-question papers, results, and feedback.
+   ```sh
+   mysql -u root -p < backend/schema.sql
+   ```
 
-Faculty endpoints are available under `/faculty-data/:userId` for the faculty
-dashboard, assignments, question bank, and forms. Employee endpoints are
-available under `/employee-data/:userId` for operational summaries and
-dashboard configuration.
+2. Create the session table without altering existing data:
 
-Create role accounts from Insomnia with `POST http://localhost:5000/register`.
-Use the JSON body below, changing the username, password, and role:
+   ```sh
+   mysql -u root -p university_erp < backend/migrations/001_create_erp_sessions.sql
+   ```
 
-```json
-{
-  "username": "accounts.admin",
-  "password": "test1234",
-  "role": "ACCOUNTANT"
-}
-```
+3. Copy `backend/.env.example` to `backend/.env`. Set `SESSION_SECRET` to a unique random value from `openssl rand -base64 48` and configure local database credentials. Do not commit `.env`.
+4. Install and start the API:
 
-For the first librarian, use:
+   ```sh
+   cd backend
+   npm install
+   npm start
+   ```
 
-```json
-{
-  "username": "library.admin",
-  "password": "test1234",
-  "role": "LIBRARIAN"
-}
-```
+The API listens on port `5000` by default. `FRONTEND_ORIGIN` must match the exact frontend origin; multiple origins may be comma-separated. Production must use HTTPS, set `NODE_ENV=production`, and keep `SESSION_SECRET` private.
 
-The API accepts role names case-insensitively. Valid roles are `STUDENT`,
-`FACULTY`, `EMPLOYEE`, `ADMIN`, `LIBRARIAN`, and `ACCOUNTANT`.
+## Authentication and access
 
-After registration, call `POST http://localhost:5000/login` to obtain the
-generated `user_id` and confirm the password:
+- `POST /login` verifies the password hash and creates a MariaDB-backed server session. The browser receives an HttpOnly session cookie, not an authentication token.
+- `GET /me` returns the active session's current user for frontend session restoration.
+- `GET /csrf-token` provides the session-bound CSRF token required as `X-CSRF-Token` on state-changing requests, including login and logout.
+- `POST /logout` destroys the server-side session and expires the cookie.
+- Sessions expire after 30 minutes of inactivity. Active account status and role are rechecked for protected API requests.
+- Public `POST /register` is limited to eligible students: the username must match the email of an active, unlinked `STUDENTS` row. The role is fixed to `STUDENT`. Provision privileged accounts through an authorized process, never through public registration.
+- Existing module URLs retain `:userId` for compatibility, but the server requires it to match the authenticated session. It is not used to establish identity.
 
-```json
-{
-  "username": "accounts.admin",
-  "password": "test1234"
-}
-```
+The frontend must send cookies with `credentials: "include"` and include the CSRF token on writes; the shared frontend API client does this.
 
-Expected login response:
+## API modules
 
-```json
-{
-  "user_id": 12,
-  "username": "accounts.admin",
-  "role": "ACCOUNTANT"
-}
-```
+- `/students` and `/academic-data/:userId`: administrator-only.
+- `/student-data/:userId`: student-only and bound to the signed-in student account.
+- `/faculty-data/:userId`: faculty-only and bound to the signed-in faculty account. `POST /faculty-data/profiles` is administrator-only.
+- `/employee-data/:userId` and `/operations-data/:userId`: authenticated staff roles with narrower checks for account administration, accounting, library, and placements.
+- `GET /health`: API availability.
 
-Use the returned `user_id` in the role-specific requests:
+The backend uses Express 5 and MariaDB/MySQL. Use a least-privilege database account outside local development.
 
-```text
-GET http://localhost:5000/employee-data/12/summary
-GET http://localhost:5000/operations-data/12/accounting/summary
-```
+## Tests
 
-For a librarian with ID `13`:
-
-```text
-GET http://localhost:5000/employee-data/13/summary
-GET http://localhost:5000/operations-data/13/library/catalog
-GET http://localhost:5000/operations-data/13/library/issues
-```
-
-Accountants can use the accounting endpoints only. Librarians can use the
-library endpoints only. `ADMIN` can access both. All employee-portal requests
-must include the user ID in the URL.
-
-Placement department endpoints are available to `EMPLOYEE` and `ADMIN` users:
-
-```text
-GET   /employee-data/:userId/placements
-POST  /employee-data/:userId/placements
-GET   /employee-data/:userId/placements/applications
-PATCH /employee-data/:userId/placements/:driveId/status
-PATCH /employee-data/:userId/placements/applications/:applicationId/status
-```
-
-The frontend placement desk is available at
-`/erp/employee/placements`. Run the schema import again before using it so the
-`PLACEMENT_DRIVES` and `PLACEMENT_APPLICATIONS` tables are created.
-
-Academic operations are available in the student and faculty portals:
-
-```text
-GET  /student-data/:userId/courses
-GET  /student-data/:userId/timetable
-GET  /student-data/:userId/attendance
-GET  /faculty-data/:userId/courses
-GET  /faculty-data/:userId/timetable
-POST /faculty-data/:userId/course-registrations
-GET  /faculty-data/:userId/attendance/:courseId
-POST /faculty-data/:userId/attendance
-```
-
-Run the schema import again to create the academic tables before using these
-routes.
-
-Administrators can create and assign courses:
-
-```text
-GET   /academic-data/:adminUserId/courses
-POST  /academic-data/:adminUserId/courses
-PATCH /academic-data/:adminUserId/courses/:courseId/assign
-GET   /academic-data/:adminUserId/registrations
-POST  /academic-data/:adminUserId/registrations
-PATCH /academic-data/:adminUserId/registrations/:registrationId/status
-```
-
-
-
-MariaDB uses the MySQL wire protocol, so the same schema and configuration work
-with either MySQL or MariaDB.
+Run `npm test` from `backend/`. Tests use synthetic users, a mocked database, and an in-memory session store; they do not connect to or modify a real database.

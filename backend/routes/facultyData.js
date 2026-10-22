@@ -238,6 +238,11 @@ router.post("/:userId/attendance", async (req, res) => {
       [courseId, faculty.FACULTY_ID],
     );
     if (!courses.length) return res.status(403).json({ message: "You can only record attendance for your courses." });
+    const enrollment = await pool.query(
+      "SELECT REGISTRATION_ID FROM COURSE_REGISTRATIONS WHERE COURSE_ID = ? AND STUDENT_ID = ? AND STATUS = 'REGISTERED'",
+      [courseId, studentId],
+    );
+    if (!enrollment.length) return res.status(403).json({ message: "The student is not registered for this course." });
     await pool.query(
       `INSERT INTO ATTENDANCE_LOGS (COURSE_ID, STUDENT_ID, FACULTY_ID, LECTURE_DATE, STATUS)
        VALUES (?, ?, ?, ?, ?)

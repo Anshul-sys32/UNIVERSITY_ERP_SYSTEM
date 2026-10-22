@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { employeeRequest, getCurrentUser } from "../api/roleApi";
+import { employeeRequest, getCurrentUser, logout } from "../api/roleApi";
 
 const EmployeeDashboard = () => {
   const navigate = useNavigate();
@@ -90,7 +90,7 @@ const EmployeeDashboard = () => {
             <h1 className="mt-2 text-3xl font-bold">{role === "ADMIN" ? "Administration workspace" : role === "ACCOUNTANT" ? "Accounts workspace" : role === "LIBRARIAN" ? "Library workspace" : "Employee workspace"}</h1>
             <p className="mt-2 text-white/70">{role === "ADMIN" ? "Manage admissions, users, and campus operations." : role === "ACCOUNTANT" ? "Manage student fees, payments, and financial records." : role === "LIBRARIAN" ? "Manage the catalog, circulation, and library members." : "Monitor campus operations and announcements."}</p>
           </div>
-          <button className="rounded-xl bg-white/10 px-4 py-3 text-sm hover:bg-white/20" onClick={() => { sessionStorage.removeItem("erpUser"); navigate("/"); }} type="button">Sign out</button>
+          <button className="rounded-xl bg-white/10 px-4 py-3 text-sm hover:bg-white/20" onClick={async () => { await logout(); navigate("/"); }} type="button">Sign out</button>
         </header>
         {error && <p className="mt-6 rounded-xl bg-yellow-300/15 p-4 text-sm text-yellow-100">{error}</p>}
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
