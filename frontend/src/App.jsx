@@ -34,6 +34,7 @@ import Notifications from "./components/Notifications";
 import AdminReports from "./components/AdminReports";
 import StudentCampusServices from "./components/StudentCampusServices";
 import CampusAdministration from "./components/CampusAdministration";
+import AdminPanelLayout from "./components/AdminPanelLayout";
 import FacultyAttendance from "./components/FacultyAttendance";
 import FacultyTimetable from "./components/FacultyTimetable";
 import AcademicCourseManagement from "./components/AcademicCourseManagement";
@@ -80,29 +81,37 @@ function App() {
           </Route>
         </Route>
 
-        {/* Employee Dashboard */}
-        <Route element={<ProtectedRoute roles={["EMPLOYEE", "ADMIN", "LIBRARIAN", "ACCOUNTANT"]} />}>
+        <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
+          <Route path="/erp/admin" element={<AdminPanelLayout />}>
+            <Route index element={<EmployeeDashboard />} />
+            <Route path="admissions" element={<ManageStudents />} />
+            <Route path="students" element={<ManageStudents />} />
+            <Route path="academics/courses" element={<AcademicCourseManagement />} />
+            <Route path="exams" element={<AdminExamManagement />} />
+            <Route path="wallet" element={<WalletAdministration />} />
+            <Route path="reports" element={<AdminReports />} />
+            <Route path="campus" element={<CampusAdministration />} />
+            <Route path="accounting" element={<Accounting />} />
+            <Route path="library" element={<LibraryManagement />} />
+            <Route path="placements" element={<PlacementManagement />} />
+            <Route path="dashboard-config/:type" element={<DashboardConfigEditor />} />
+          </Route>
+        </Route>
+
+        {/* Staff dashboards */}
+        <Route element={<ProtectedRoute roles={["EMPLOYEE", "LIBRARIAN", "ACCOUNTANT"]} />}>
           <Route path="/erp/employee" element={<EmployeeDashboard />} />
           <Route path="/dashboard-config/:type" element={<DashboardConfigEditor />} />
         </Route>
 
-        <Route element={<ProtectedRoute roles={["ADMIN", "ACCOUNTANT"]} />}>
+        <Route element={<ProtectedRoute roles={["ACCOUNTANT"]} />}>
           <Route path="/erp/employee/accounting" element={<Accounting />} />
         </Route>
-        <Route element={<ProtectedRoute roles={["ADMIN", "LIBRARIAN"]} />}>
+        <Route element={<ProtectedRoute roles={["LIBRARIAN"]} />}>
           <Route path="/erp/employee/library" element={<LibraryManagement />} />
         </Route>
-        <Route element={<ProtectedRoute roles={["ADMIN", "EMPLOYEE"]} />}>
+        <Route element={<ProtectedRoute roles={["EMPLOYEE"]} />}>
           <Route path="/erp/employee/placements" element={<PlacementManagement />} />
-        </Route>
-        <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
-          <Route path="/erp/admin/admissions" element={<ManageStudents />} />
-          <Route path="/erp/admin/students" element={<ManageStudents />} />
-          <Route path="/erp/admin/academics/courses" element={<AcademicCourseManagement />} />
-          <Route path="/erp/admin/exams" element={<AdminExamManagement />} />
-          <Route path="/erp/admin/wallet" element={<WalletAdministration />} />
-          <Route path="/erp/admin/reports" element={<AdminReports />} />
-          <Route path="/erp/admin/campus" element={<CampusAdministration />} />
         </Route>
         <Route element={<ProtectedRoute roles={["MERCHANT"]} />}>
           <Route path="/erp/merchant" element={<MerchantDashboard />} />

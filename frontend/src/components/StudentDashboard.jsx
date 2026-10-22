@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { dashboardSettings } from "../config/dashboardConfig";
 import { fetchStudentResource } from "../api/studentApi";
 import { logout } from "../api/roleApi";
+import AnimatedSidebar, { SidebarToggle } from "./AnimatedSidebar";
 import BellIcon from "../assets/icons/bell.png";
 import UserIcon from "../assets/icons/profile.png";
-import ExitIcon from "../assets/icons/logout.png";
 import StudentDataState from "./StudentDataState";
 
 const Card = ({ title, children }) => (
@@ -36,7 +36,33 @@ const StudentDashboard = () => {
   const [dashboard, setDashboard] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
   const [state, setState] = useState({ loading: true, error: "" });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const settings = dashboardSettings.student;
+  const closeSidebar = useCallback(() => setSidebarMobileOpen(false), []);
+  const toggleSidebar = useCallback(() => setSidebarCollapsed((current) => !current), []);
+  const signOut = async () => { await logout(); navigate("/"); };
+  const sidebarGroups = [
+    { label: "Overview", items: [
+      { path: "/erp/student", label: "Dashboard", icon: "home", end: true },
+      { path: "/erp/student/profile", label: "My Profile", icon: "profile" },
+    ] },
+    { label: "Learning", items: [
+      { path: "/erp/student/academics", label: "Academics", icon: "academics" },
+      { path: "/erp/student/assignments", label: "Assignments", icon: "assignments" },
+      { path: "/erp/student/exams", label: "Examinations", icon: "exams" },
+      { path: "/erp/student/question-bank", label: "Question Bank", icon: "questions" },
+      { path: "/erp/student/results", label: "Results", icon: "exams" },
+    ] },
+    { label: "Campus", items: [
+      { path: "/erp/student/fees", label: "Fees", icon: "finance" },
+      { path: "/erp/student/wallet", label: "Campus Wallet", icon: "wallet" },
+      { path: "/erp/student/library", label: "Library", icon: "library" },
+      { path: "/erp/student/events", label: "Events & Placements", icon: "placements" },
+      { path: "/erp/student/campus-services", label: "Hostel & Research", icon: "campus" },
+      { path: "/erp/student/feedback", label: "Help & Feedback", icon: "services" },
+    ] },
+  ];
 
   useEffect(() => {
     Promise.all([fetchStudentResource("dashboard"), fetchStudentResource("announcements")])
@@ -55,34 +81,13 @@ const StudentDashboard = () => {
   const results = dashboard?.results || [];
 
   return (
-    <div className="min-h-screen text-white" style={{ background: settings.background }}>
-      <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col md:flex-row">
-        <aside className="w-full border-b border-white/20 bg-black/10 p-5 md:w-72 md:border-b-0 md:border-r md:p-6">
-          <div className="mb-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-white/60">University ERP</p>
-            <h1 className="mt-2 text-2xl font-bold">Student portal</h1>
-          </div>
-          <nav className="grid grid-cols-2 gap-2 md:block md:space-y-1">
-            {settings.sidebarItems.map((item) => (
-              <NavLink
-                className={({ isActive }) => `block rounded-xl px-4 py-3 text-sm transition ${isActive ? "bg-white text-slate-900 font-semibold" : "text-white/75 hover:bg-white/15 hover:text-white"}`}
-                end={item.path === "/erp/student"}
-                key={item.path}
-                to={item.path}
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-          <button className="mt-6 flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-white/75 hover:bg-white/15 hover:text-white" onClick={async () => { await logout(); navigate("/"); }} type="button">
-            <img src={ExitIcon} alt="" className="h-6 w-6" /> Sign out
-          </button>
-        </aside>
-
-        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+    <div className="student-shell min-h-screen text-white" style={{ background: settings.background }}>
+      <div className="sidebar-layout mx-auto max-w-[1600px]">
+        <AnimatedSidebar title="Student portal" subtitle="Your learning workspace" groups={sidebarGroups} collapsed={sidebarCollapsed} mobileOpen={sidebarMobileOpen} onToggleCollapse={toggleSidebar} onCloseMobile={closeSidebar} onLogout={signOut} />
+        <main className="sidebar-layout-main min-w-0 p-4 sm:p-6 lg:p-8">
           <header className="mb-8 flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm text-white/60">Student workspace</p>
+              <div className="flex items-center gap-3"><SidebarToggle className="sidebar-toggle-mobile" expanded={sidebarMobileOpen} onClick={() => setSidebarMobileOpen((current) => !current)} /><p className="text-sm text-white/60">Student workspace</p></div>
               <h2 className="mt-1 text-2xl font-bold sm:text-3xl">{student ? `Welcome, ${student.FIRST_NAME}` : "Welcome back"}</h2>
             </div>
             <div className="flex gap-3">

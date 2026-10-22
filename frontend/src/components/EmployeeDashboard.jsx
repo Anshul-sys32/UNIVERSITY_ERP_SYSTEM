@@ -141,7 +141,7 @@ const EmployeeDashboard = () => {
         {(role === "ADMIN" || role === "EMPLOYEE") && <section className="mt-8">
           <h2 className="text-xl font-semibold">Placement department</h2>
           <div className="mt-4 grid gap-5 md:grid-cols-2">
-            <button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" onClick={() => navigate("/erp/employee/placements")} type="button">
+            <button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" onClick={() => navigate(role === "ADMIN" ? "/erp/admin/placements" : "/erp/employee/placements")} type="button">
               <h3 className="text-lg font-semibold">Placement management</h3>
               <p className="mt-2 text-sm text-white/65">Create employer drives, track applications, and manage selection stages.</p>
               <span className="mt-5 inline-block text-sm text-yellow-200">Open placement desk →</span>
@@ -151,7 +151,7 @@ const EmployeeDashboard = () => {
         <section className="mt-8">
           <h2 className="text-xl font-semibold">Dashboard configuration</h2>
           <div className="mt-4 grid gap-5 md:grid-cols-3">
-            {[["student", "Student dashboard", "Manage student navigation and theme."], ["faculty", "Faculty dashboard", "Configure faculty workspace defaults."], ["staff", "Staff dashboard", "Configure operational staff navigation."]].map(([type, title, description]) => <button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" key={type} onClick={() => navigate(`/dashboard-config/${type}`)} type="button"><h3 className="text-lg font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-white/65">{description}</p><span className="mt-5 inline-block text-sm text-yellow-200">Open settings →</span></button>)}
+            {[ ["student", "Student dashboard", "Manage student navigation and theme."], ["faculty", "Faculty dashboard", "Configure faculty workspace defaults."], ["staff", "Staff dashboard", "Configure operational staff navigation."]].map(([type, title, description]) => <button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" key={type} onClick={() => navigate(role === "ADMIN" ? `/erp/admin/dashboard-config/${type}` : `/dashboard-config/${type}`)} type="button"><h3 className="text-lg font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-white/65">{description}</p><span className="mt-5 inline-block text-sm text-yellow-200">Open settings →</span></button>)}
           </div>
         </section>
         <section className="mt-8 grid gap-5 lg:grid-cols-2">
@@ -168,11 +168,11 @@ const EmployeeDashboard = () => {
         {(role === "ADMIN" || role === "ACCOUNTANT" || role === "LIBRARIAN") && <section className="mt-8">
           <h2 className="text-xl font-semibold">Operations</h2>
           <div className="mt-4 grid gap-5 md:grid-cols-2">
-            {(role === "ADMIN" || role === "ACCOUNTANT") && <button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" onClick={() => navigate("/erp/employee/accounting")} type="button">
+            {(role === "ADMIN" || role === "ACCOUNTANT") && <button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" onClick={() => navigate(role === "ADMIN" ? "/erp/admin/accounting" : "/erp/employee/accounting")} type="button">
               <h3 className="text-lg font-semibold">Accounting</h3>
               <p className="mt-2 text-sm text-white/65">Create fee ledger entries and monitor outstanding payments.</p>
             </button>}
-            {(role === "ADMIN" || role === "LIBRARIAN") && <button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" onClick={() => navigate("/erp/employee/library")} type="button">
+            {(role === "ADMIN" || role === "LIBRARIAN") && <button className="erp-panel p-6 text-left transition-colors duration-150 hover:bg-white/20" onClick={() => navigate(role === "ADMIN" ? "/erp/admin/library" : "/erp/employee/library")} type="button">
               <h3 className="text-lg font-semibold">Library</h3>
               <p className="mt-2 text-sm text-white/65">Manage the catalog, issue books, and process returns.</p>
             </button>}

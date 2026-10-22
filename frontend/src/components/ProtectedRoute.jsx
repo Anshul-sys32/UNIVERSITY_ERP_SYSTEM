@@ -34,7 +34,7 @@ const ProtectedRoute = ({ roles }) => {
 
   if (loading) return <main className="min-h-screen p-8 text-white erp-gradient">Checking your session…</main>;
   if (!user) return <Navigate to={`/signin?returnTo=${encodeURIComponent(location.pathname)}`} replace />;
-  if (roles && !roles.includes(user.role)) return <Navigate to={user.role === "STUDENT" ? "/erp/student" : user.role === "FACULTY" ? "/erp/faculty" : "/erp/employee"} replace />;
+  if (roles && !roles.includes(user.role)) return <Navigate to={user.role === "STUDENT" ? "/erp/student" : user.role === "FACULTY" ? "/erp/faculty" : user.role === "ADMIN" ? "/erp/admin" : "/erp/employee"} replace />;
   return <Outlet />;
 };
 

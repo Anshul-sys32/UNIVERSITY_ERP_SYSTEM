@@ -1,6 +1,6 @@
 const pool = require("../db");
 
-const roleAccess = (roles, { matchPathUserId = false, database = pool } = {}) => async (req, res, next) => {
+const roleAccess = (roles, { matchPathUserId = false, database = pool, module } = {}) => async (req, res, next) => {
   const userId = Number(req.session?.userId);
   if (!Number.isInteger(userId) || userId < 1) {
     return res.status(401).json({ message: "Authentication is required." });
@@ -27,7 +27,27 @@ const roleAccess = (roles, { matchPathUserId = false, database = pool } = {}) =>
     if (!roles.includes(users[0].ROLE)) {
       return res.status(403).json({ message: "This account is not authorized for this module." });
     }
-    req.auth = { userId: Number(users[0].USER_ID), username: users[0].USERNAME, role: users[0].ROLE };
+    const moduleKey = typeof module === "function" ? module(req) : module;
+    let policy = null;
+    if (moduleKey) {
+      const actionColumn = ["GET", "HEAD", "OPTIONS"].includes(req.method.toUpperCase()) ? "CAN_READ" : "CAN_WRITE";
+      const policies = await database.query(
+        `SELECT CAN_READ, CAN_WRITE, ROW_SCOPE, SIDEBAR_VISIBLE
+         FROM ROLE_MODULE_POLICIES WHERE ROLE_NAME = ? AND MODULE_KEY = ?`,
+        [users[0].ROLE, moduleKey],
+      );
+      policy = policies[0];
+      if (!policy || !Number(policy[actionColumn])) {
+        return res.status(403).json({ message: "This role does not have permission for this module action." });
+      }
+    }
+    req.auth = {
+      userId: Number(users[0].USER_ID),
+      username: users[0].USERNAME,
+      role: users[0].ROLE,
+      module: moduleKey || null,
+      rowScope: policy?.ROW_SCOPE || null,
+    };
     req.erpRole = users[0].ROLE;
     return next();
   } catch (error) {

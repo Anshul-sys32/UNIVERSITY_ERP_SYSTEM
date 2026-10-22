@@ -6,7 +6,7 @@ const destinationByRole = {
   STUDENT: "/erp/student",
   FACULTY: "/erp/faculty",
   EMPLOYEE: "/erp/employee",
-  ADMIN: "/erp/employee",
+  ADMIN: "/erp/admin",
   MERCHANT: "/erp/merchant",
 };
 
