@@ -37,6 +37,8 @@
 
 The API listens on port `5000` by default. `FRONTEND_ORIGIN` must match the exact frontend origin; multiple origins may be comma-separated. Production must use HTTPS, set `NODE_ENV=production`, and keep `SESSION_SECRET` private.
 
+For MySQL accounts using `sha256_password` or `caching_sha2_password`, configure `DB_CACHING_RSA_PUBLIC_KEY` with the trusted server public-key file when available. `DB_ALLOW_PUBLIC_KEY_RETRIEVAL=true` enables fetching the key from the server; use it only on a trusted connection (prefer TLS), and leave it disabled otherwise.
+
 ## Authentication and access
 
 - `POST /login` verifies the password hash and creates a MariaDB-backed server session. The browser receives an HttpOnly session cookie, not an authentication token.

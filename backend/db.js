@@ -10,6 +10,8 @@ const pool = mariadb.createPool({
   connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 5),
   bigIntAsNumber: true,
   acquireTimeout: 10000,
+  cachingRsaPublicKey: process.env.DB_CACHING_RSA_PUBLIC_KEY || undefined,
+  allowPublicKeyRetrieval: process.env.DB_ALLOW_PUBLIC_KEY_RETRIEVAL === "true",
 });
 
 module.exports = pool;

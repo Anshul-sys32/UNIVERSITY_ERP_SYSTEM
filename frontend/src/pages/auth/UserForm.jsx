@@ -38,7 +38,11 @@ function UserForm() {
         setError(`This account is registered as ${data.role.toLowerCase()}, not ${role}.`);
         return;
       }
-      navigate(destinationByRole[data.role] || "/erp/student");
+      const returnTo = new URLSearchParams(location.search).get("returnTo");
+      const destination = returnTo?.startsWith("/") && !returnTo.startsWith("//")
+        ? returnTo
+        : destinationByRole[data.role] || "/erp/student";
+      navigate(destination);
     } catch (requestError) {
       console.error("Login error:", requestError);
       setError("Unable to reach the server. Check that the backend is running.");

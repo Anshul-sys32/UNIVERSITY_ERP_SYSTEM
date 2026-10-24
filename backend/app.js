@@ -240,7 +240,8 @@ const createApp = ({
     }
   });
 
-  app.use((error, _req, res, _next) => {
+  app.use((error, _req, res, next) => {
+    if (res.headersSent) return next(error);
     console.error("Unhandled server error:", error);
     res.status(500).json({ message: "Internal server error." });
   });
