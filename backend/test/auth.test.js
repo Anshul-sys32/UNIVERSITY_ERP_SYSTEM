@@ -59,7 +59,7 @@ const database = {
     }
     if (sql.startsWith("INSERT INTO `USERS`") || sql.startsWith("INSERT INTO `AUDIT_EVENTS`")) {
       adminDataWrites.push({ sql, params });
-      return { insertId: 88, affectedRows: 1 };
+      return { insertId: sql.startsWith("INSERT INTO `USERS`") ? 9007199254740993n : 88, affectedRows: 1 };
     }
     if (sql.startsWith("UPDATE `USERS`") || sql.startsWith("UPDATE `AUDIT_EVENTS`")) {
       adminDataWrites.push({ sql, params });
@@ -429,10 +429,11 @@ test("admin database console supports CRUD across ordinary and audit tables with
   await agent.delete("/admin-data/AUDIT_EVENTS").set("X-CSRF-Token", csrfToken).send({ key: { AUDIT_EVENT_ID: 1 } }).expect(200);
   assert.ok(adminDataWrites.at(-1).sql.startsWith("DELETE FROM `AUDIT_EVENTS`"));
 
-  await agent.post("/admin-data/USERS")
+  const createdUser = await agent.post("/admin-data/USERS")
     .set("X-CSRF-Token", csrfToken)
     .send({ values: { USERNAME: "new.staff@example.edu", PASSWORD: "a-new-secure-password", ROLE: "EMPLOYEE", IS_ACTIVE: 1 } })
     .expect(201);
+  assert.equal(createdUser.body.insertId, "9007199254740993");
   const insert = adminDataWrites.at(-1);
   assert.ok(insert.sql.includes("`PASSWORD_HASH`"));
   assert.ok(!insert.params.includes("a-new-secure-password"));

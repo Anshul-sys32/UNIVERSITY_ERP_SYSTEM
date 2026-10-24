@@ -135,7 +135,10 @@ const createAdminDataRouter = (database = pool) => {
       const result = columns.length
         ? await database.query(`INSERT INTO ${quoteIdentifier(table.name)} (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`, entries.map(([, value]) => value))
         : await database.query(`INSERT INTO ${quoteIdentifier(table.name)} () VALUES ()`);
-      return res.status(201).json({ message: "Record created.", insertId: result.insertId || null });
+      const insertId = result.insertId === undefined || result.insertId === null
+        ? null
+        : String(result.insertId);
+      return res.status(201).json({ message: "Record created.", insertId });
     } catch (error) {
       if (error.status) return res.status(error.status).json({ message: error.message });
       if (["ER_DUP_ENTRY", "ER_NO_REFERENCED_ROW_2", "ER_ROW_IS_REFERENCED_2", "ER_CHECK_CONSTRAINT_VIOLATED"].includes(error.code)) {
